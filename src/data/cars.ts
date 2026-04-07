@@ -1,0 +1,34 @@
+import type { Car } from "../types/car.js";
+
+export const cars: Car[] = [
+  {
+    id: 1,
+    make: "Toyota",
+    model: "Corolla",
+    year: 2022,
+    color: "White",
+    numberOfDoors: 4,
+    pricePerDay: 45,
+    available: true,
+  },
+  {
+    id: 2,
+    make: "BMW",
+    model: "X5",
+    year: 2023,
+    color: "Black",
+    numberOfDoors: 4,
+    pricePerDay: 90,
+    available: true,
+  },
+  {
+    id: 3,
+    make: "Audi",
+    model: "A4",
+    year: 2021,
+    color: "Gray",
+    numberOfDoors: 4,
+    pricePerDay: 70,
+    available: false,
+  },
+];
