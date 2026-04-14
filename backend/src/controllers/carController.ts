@@ -9,12 +9,73 @@ import {
 } from "../services/carService.js";
 import { validateCarPayload } from "../utils/carValidation.js";
 
-export async function getCars(_req: Request, res: Response): Promise<Response> {
+type CarListQueryParams = {
+  make?: string;
+  available?: string;
+  limit?: string;
+  page?: string;
+};
+
+function getSingleQueryValue(value: unknown): string | undefined {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value) && typeof value[0] === "string") {
+    return value[0];
+  }
+
+  return undefined;
+}
+
+export async function getCars(
+  req: Request<unknown, unknown, unknown, CarListQueryParams>,
+  res: Response
+): Promise<Response> {
+  const make = getSingleQueryValue(req.query.make)?.trim();
+  const availableRaw = getSingleQueryValue(req.query.available);
+  const limitRaw = getSingleQueryValue(req.query.limit);
+  const pageRaw = getSingleQueryValue(req.query.page);
+
+  let available: boolean | undefined;
+  if (availableRaw !== undefined) {
+    if (availableRaw === "true") {
+      available = true;
+    } else if (availableRaw === "false") {
+      available = false;
+    } else {
+      return res
+        .status(400)
+        .json({ message: "available must be either true or false" });
+    }
+  }
+
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 10;
+  const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
+
+  if (!Number.isInteger(limit) || limit <= 0) {
+    return res.status(400).json({ message: "limit must be a positive integer" });
+  }
+
+  if (!Number.isInteger(page) || page <= 0) {
+    return res.status(400).json({ message: "page must be a positive integer" });
+  }
+
   try {
-    const cars = await getAllCars();
+    const cars = await getAllCars({
+      make: make || undefined,
+      available,
+      limit,
+      page,
+    });
+
     return res.status(200).json({
-      count: cars.length,
-      data: cars,
+      count: cars.data.length,
+      total: cars.total,
+      page: cars.page,
+      limit: cars.limit,
+      totalPages: cars.totalPages,
+      data: cars.data,
     });
   } catch {
     return res.status(500).json({ message: "Failed to fetch cars" });

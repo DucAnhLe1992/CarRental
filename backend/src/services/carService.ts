@@ -1,7 +1,22 @@
-import { desc, eq } from "drizzle-orm";
+import { and, count, desc, eq, ilike, type SQL } from "drizzle-orm";
 import { db } from "../database/db.js";
 import { carsTable, SelectCar } from "../database/schema.js";
 import type { Car, CarInput } from "../types/car.js";
+
+type CarListQuery = {
+  make?: string;
+  available?: boolean;
+  limit: number;
+  page: number;
+};
+
+type PaginatedCars = {
+  data: Car[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
 
 function mapRowToCar(row: SelectCar): Car {
   return {
@@ -29,9 +44,42 @@ function normalizeOptionalText(value: string | null | undefined): string | null 
   return trimmed === "" ? null : trimmed;
 }
 
-export async function getAllCars(): Promise<Car[]> {
-  const rows = await db.select().from(carsTable).orderBy(desc(carsTable.id));
-  return rows.map(mapRowToCar);
+export async function getAllCars(query: CarListQuery): Promise<PaginatedCars> {
+  const conditions: SQL[] = [];
+
+  if (query.make) {
+    conditions.push(ilike(carsTable.make, `%${query.make}%`));
+  }
+
+  if (query.available !== undefined) {
+    conditions.push(eq(carsTable.available, query.available));
+  }
+
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const offset = (query.page - 1) * query.limit;
+
+  const [totalResult] = await db
+    .select({ total: count() })
+    .from(carsTable)
+    .where(whereClause);
+
+  const rows = await db
+    .select()
+    .from(carsTable)
+    .where(whereClause)
+    .orderBy(desc(carsTable.id))
+    .limit(query.limit)
+    .offset(offset);
+
+  const total = Number(totalResult?.total ?? 0);
+
+  return {
+    data: rows.map(mapRowToCar),
+    total,
+    page: query.page,
+    limit: query.limit,
+    totalPages: total === 0 ? 0 : Math.ceil(total / query.limit),
+  };
 }
 
 export async function getCarById(id: number): Promise<Car | undefined> {

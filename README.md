@@ -85,11 +85,23 @@ The frontend uses `VITE_API_URL` if provided, otherwise defaults to `http://loca
 
 Base URL: `http://localhost:3000`
 
-- `GET /cars` - list all cars
+- `GET /cars` - list cars with filtering and pagination
 - `GET /cars/:id` - get car by id
 - `POST /cars` - create car
 - `PUT /cars/:id` - update car
 - `DELETE /cars/:id` - delete car
+
+`GET /cars` query parameters:
+
+- `make` (optional): case-insensitive partial match, e.g. `?make=Toyota`
+- `available` (optional): `true` or `false`
+- `limit` (optional): positive integer, default `10`
+- `page` (optional): positive integer, default `1`
+
+Examples:
+
+- `GET /cars?make=Toyota&available=true`
+- `GET /cars?limit=10&page=2`
 
 Required payload fields for `POST` and `PUT`:
 
