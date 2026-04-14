@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import type { FormEventHandler } from "react";
 import { useState } from "react";
 import { createCar } from "../lib/api";
 import CarForm from "../components/CarForm";
@@ -10,7 +10,7 @@ export default function CreateCarPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
@@ -25,7 +25,7 @@ export default function CreateCarPage() {
     } finally {
       setSubmitting(false);
     }
-  }
+  };
 
   return (
     <section className="panel">
@@ -36,7 +36,7 @@ export default function CreateCarPage() {
         form={form}
         submitting={submitting}
         submitLabel="Create"
-        onSubmit={(event) => void handleSubmit(event)}
+        onSubmit={handleSubmit}
         onChange={setForm}
       />
     </section>

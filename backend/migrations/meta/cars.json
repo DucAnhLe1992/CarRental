@@ -138,5 +138,115 @@
     "created_at": "2026-04-14 11:25:11.455171",
     "updated_at": "2026-04-14 11:25:11.455171",
     "image_url": null
+  },
+  {
+    "id": 11,
+    "make": "Kia",
+    "model": "Sportage",
+    "year": 2024,
+    "color": "Orange",
+    "number_of_doors": 4,
+    "price_per_day": "62",
+    "available": true,
+    "description": "Compact SUV with modern tech, comfortable seating, and efficient performance for daily trips."
+  },
+  {
+    "id": 12,
+    "make": "Chevrolet",
+    "model": "Malibu",
+    "year": 2021,
+    "color": "Navy",
+    "number_of_doors": 4,
+    "price_per_day": "47",
+    "available": false,
+    "description": "Mid-size sedan offering a smooth ride, roomy cabin, and practical features for family travel."
+  },
+  {
+    "id": 13,
+    "make": "Mazda",
+    "model": "CX-5",
+    "year": 2023,
+    "color": "Red",
+    "number_of_doors": 4,
+    "price_per_day": "68",
+    "available": true,
+    "description": "Stylish crossover SUV with sporty handling, premium interior feel, and excellent safety features."
+  },
+  {
+    "id": 14,
+    "make": "Subaru",
+    "model": "Outback",
+    "year": 2022,
+    "color": "Brown",
+    "number_of_doors": 4,
+    "price_per_day": "71",
+    "available": true,
+    "description": "Adventure-ready wagon with all-wheel drive, generous cargo space, and dependable year-round capability."
+  },
+  {
+    "id": 15,
+    "make": "Tesla",
+    "model": "Model 3",
+    "year": 2024,
+    "color": "White",
+    "number_of_doors": 4,
+    "price_per_day": "110",
+    "available": false,
+    "description": "All-electric sedan delivering quick acceleration, advanced driver assistance, and minimalist design."
+  },
+  {
+    "id": 16,
+    "make": "Lexus",
+    "model": "RX 350",
+    "year": 2023,
+    "color": "Silver",
+    "number_of_doors": 4,
+    "price_per_day": "102",
+    "available": true,
+    "description": "Premium SUV known for quiet comfort, refined ride quality, and a spacious upscale interior."
+  },
+  {
+    "id": 17,
+    "make": "Volvo",
+    "model": "XC60",
+    "year": 2022,
+    "color": "Blue",
+    "number_of_doors": 4,
+    "price_per_day": "98",
+    "available": true,
+    "description": "Safety-focused luxury SUV with elegant Scandinavian design and confident all-around performance."
+  },
+  {
+    "id": 18,
+    "make": "Porsche",
+    "model": "Macan",
+    "year": 2021,
+    "color": "Black",
+    "number_of_doors": 4,
+    "price_per_day": "130",
+    "available": false,
+    "description": "Performance-oriented compact luxury SUV combining athletic driving dynamics with everyday practicality."
+  },
+  {
+    "id": 19,
+    "make": "Renault",
+    "model": "Megane",
+    "year": 2020,
+    "color": "Gray",
+    "number_of_doors": 4,
+    "price_per_day": "44",
+    "available": true,
+    "description": "Comfortable hatchback with efficient fuel usage, practical layout, and easy urban maneuverability."
+  },
+  {
+    "id": 20,
+    "make": "Peugeot",
+    "model": "3008",
+    "year": 2023,
+    "color": "Green",
+    "number_of_doors": 4,
+    "price_per_day": "66",
+    "available": true,
+    "description": "Modern crossover featuring distinctive styling, flexible cabin space, and smooth long-distance comfort."
   }
 ]

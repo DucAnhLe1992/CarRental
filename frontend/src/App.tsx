@@ -1,9 +1,9 @@
 import { Navigate, NavLink, Route, Routes } from "react-router-dom";
-import "./App.css";
 import CarDetailPage from "./pages/CarDetailPage";
 import CarsListPage from "./pages/CarsListPage";
 import CreateCarPage from "./pages/CreateCarPage";
 import EditDeleteCarPage from "./pages/EditDeleteCarPage";
+import "./App.css";
 
 function App() {
   return (
@@ -11,16 +11,13 @@ function App() {
       <header className="hero">
         <p className="eyebrow">Rental Dashboard</p>
         <h1>Car Inventory</h1>
-        <p className="hero-subtitle">
-          Split into dedicated pages for each API action.
-        </p>
 
         <nav className="top-nav">
           <NavLink to="/cars" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-            GET all cars
+            See cars
           </NavLink>
           <NavLink to="/cars/new" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-            POST create car
+            Add car
           </NavLink>
         </nav>
       </header>

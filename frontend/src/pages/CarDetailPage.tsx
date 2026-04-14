@@ -61,7 +61,7 @@ export default function CarDetailPage() {
 
           <div className="actions">
             <Link className="button-link ghost-link" to={`/cars/${car.id}/edit`}>
-              Edit/Delete
+              Edit
             </Link>
             <Link className="button-link ghost-link" to="/cars">
               Back to list
