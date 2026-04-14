@@ -7,6 +7,10 @@ export type Car = {
   numberOfDoors: number;
   pricePerDay: number;
   available: boolean;
+  description: string | null;
+  imageUrl: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
-export type CarInput = Omit<Car, "id">;
+export type CarInput = Omit<Car, "id" | "createdAt" | "updatedAt">;

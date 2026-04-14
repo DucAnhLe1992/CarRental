@@ -10,6 +10,10 @@ export const cars: Car[] = [
     numberOfDoors: 4,
     pricePerDay: 45,
     available: true,
+    description: null,
+    imageUrl: null,
+    createdAt: null,
+    updatedAt: null,
   },
   {
     id: 2,
@@ -20,6 +24,10 @@ export const cars: Car[] = [
     numberOfDoors: 4,
     pricePerDay: 90,
     available: true,
+    description: null,
+    imageUrl: null,
+    createdAt: null,
+    updatedAt: null,
   },
   {
     id: 3,
@@ -30,5 +38,9 @@ export const cars: Car[] = [
     numberOfDoors: 4,
     pricePerDay: 70,
     available: false,
+    description: null,
+    imageUrl: null,
+    createdAt: null,
+    updatedAt: null,
   },
 ];

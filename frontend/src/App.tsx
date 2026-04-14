@@ -10,9 +10,13 @@ type Car = {
   numberOfDoors: number;
   pricePerDay: number;
   available: boolean;
+  description: string | null;
+  imageUrl: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 };
 
-type CarInput = Omit<Car, "id">;
+type CarInput = Omit<Car, "id" | "createdAt" | "updatedAt">;
 
 type FormState = {
   make: string;
@@ -22,6 +26,8 @@ type FormState = {
   numberOfDoors: string;
   pricePerDay: string;
   available: boolean;
+  description: string;
+  imageUrl: string;
 };
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
@@ -34,6 +40,8 @@ const initialFormState: FormState = {
   numberOfDoors: "4",
   pricePerDay: "",
   available: true,
+  description: "",
+  imageUrl: "",
 };
 
 function App() {
@@ -108,6 +116,8 @@ function App() {
       numberOfDoors: String(car.numberOfDoors),
       pricePerDay: String(car.pricePerDay),
       available: car.available,
+      description: car.description ?? "",
+      imageUrl: car.imageUrl ?? "",
     });
     setNotice(null);
     setError(null);
@@ -122,6 +132,8 @@ function App() {
       numberOfDoors: Number(state.numberOfDoors),
       pricePerDay: Number(state.pricePerDay),
       available: state.available,
+      description: state.description,
+      imageUrl: state.imageUrl,
     };
   }
 
@@ -264,6 +276,33 @@ function App() {
               />
             </label>
 
+            <label>
+              Description
+              <textarea
+                rows={3}
+                value={form.description}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    description: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
+            <label>
+              Image URL
+              <input
+                value={form.imageUrl}
+                onChange={(event) =>
+                  setForm((prev) => ({
+                    ...prev,
+                    imageUrl: event.target.value,
+                  }))
+                }
+              />
+            </label>
+
             <label className="checkbox-row">
               <input
                 type="checkbox"
@@ -314,6 +353,18 @@ function App() {
                   </p>
                   <p>
                     ${car.pricePerDay}/day • {car.available ? "Available" : "Unavailable"}
+                  </p>
+                  {car.description ? <p>{car.description}</p> : null}
+                  {car.imageUrl ? (
+                    <p>
+                      Image: <a href={car.imageUrl} target="_blank" rel="noreferrer">View</a>
+                    </p>
+                  ) : null}
+                  <p>
+                    Created: {car.createdAt ? new Date(car.createdAt).toLocaleString() : "N/A"}
+                  </p>
+                  <p>
+                    Updated: {car.updatedAt ? new Date(car.updatedAt).toLocaleString() : "N/A"}
                   </p>
                 </div>
                 <div className="item-actions">

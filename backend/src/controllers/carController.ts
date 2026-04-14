@@ -9,16 +9,31 @@ import {
 } from "../services/carService.js";
 import { validateCarPayload } from "../utils/carValidation.js";
 
-export function getCars(_req: Request, res: Response): Response {
-  return res.status(200).json({
-    count: getAllCars().length,
-    data: getAllCars(),
-  });
+export async function getCars(_req: Request, res: Response): Promise<Response> {
+  try {
+    const cars = await getAllCars();
+    return res.status(200).json({
+      count: cars.length,
+      data: cars,
+    });
+  } catch {
+    return res.status(500).json({ message: "Failed to fetch cars" });
+  }
 }
 
-export function getCar(req: Request<{ id: string }>, res: Response): Response {
+export async function getCar(req: Request<{ id: string }>, res: Response): Promise<Response> {
   const id = Number.parseInt(req.params.id, 10);
-  const car = getCarById(id);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "Invalid car id" });
+  }
+
+  let car;
+  try {
+    car = await getCarById(id);
+  } catch {
+    return res.status(500).json({ message: "Failed to fetch car" });
+  }
 
   if (!car) {
     return res.status(404).json({ message: "Car not found" });
@@ -27,44 +42,67 @@ export function getCar(req: Request<{ id: string }>, res: Response): Response {
   return res.status(200).json(car);
 }
 
-export function addCar(
+export async function addCar(
   req: Request<unknown, unknown, Partial<CarInput>>,
   res: Response
-): Response {
+): Promise<Response> {
   const error = validateCarPayload(req.body);
 
   if (error) {
     return res.status(400).json({ message: error });
   }
 
-  const newCar = createCar(req.body as CarInput);
-  return res.status(201).json(newCar);
+  try {
+    const newCar = await createCar(req.body as CarInput);
+    return res.status(201).json(newCar);
+  } catch {
+    return res.status(500).json({ message: "Failed to create car" });
+  }
 }
 
-export function editCar(
+export async function editCar(
   req: Request<{ id: string }, unknown, Partial<CarInput>>,
   res: Response
-): Response {
+): Promise<Response> {
   const id = Number.parseInt(req.params.id, 10);
-  const car = getCarById(id);
 
-  if (!car) {
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "Invalid car id" });
+  }
+
+  const error = validateCarPayload(req.body);
+
+  if (error) {
+    return res.status(400).json({ message: error });
+  }
+
+  let updatedCar;
+  try {
+    updatedCar = await updateCar(id, req.body as CarInput);
+  } catch {
+    return res.status(500).json({ message: "Failed to update car" });
+  }
+
+  if (!updatedCar) {
     return res.status(404).json({ message: "Car not found" });
   }
 
-  const error = validateCarPayload(req.body);
-
-  if (error) {
-    return res.status(400).json({ message: error });
-  }
-
-  const updatedCar = updateCar(id, req.body as CarInput);
   return res.status(200).json(updatedCar);
 }
 
-export function removeCar(req: Request<{ id: string }>, res: Response): Response {
+export async function removeCar(req: Request<{ id: string }>, res: Response): Promise<Response> {
   const id = Number.parseInt(req.params.id, 10);
-  const deletedCar = deleteCar(id);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "Invalid car id" });
+  }
+
+  let deletedCar;
+  try {
+    deletedCar = await deleteCar(id);
+  } catch {
+    return res.status(500).json({ message: "Failed to delete car" });
+  }
 
   if (!deletedCar) {
     return res.status(404).json({ message: "Car not found" });

@@ -71,10 +71,24 @@ input {
   background: #fff;
 }
 
+textarea {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  background: #fff;
+  resize: vertical;
+}
+
 input:focus-visible,
+textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+a {
+  color: var(--accent);
 }
 
 .car-form .checkbox-row {

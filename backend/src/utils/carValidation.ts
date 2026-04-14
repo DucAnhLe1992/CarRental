@@ -49,5 +49,21 @@ export function validateCarPayload(payload: Partial<CarInput>): string | null {
     return "available must be a boolean";
   }
 
+  if (
+    payload.description !== undefined &&
+    payload.description !== null &&
+    typeof payload.description !== "string"
+  ) {
+    return "description must be a string when provided";
+  }
+
+  if (
+    payload.imageUrl !== undefined &&
+    payload.imageUrl !== null &&
+    typeof payload.imageUrl !== "string"
+  ) {
+    return "imageUrl must be a string when provided";
+  }
+
   return null;
 }
