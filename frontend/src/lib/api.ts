@@ -2,6 +2,22 @@ import type { Car, CarInput } from "../types/car";
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
+export type FetchCarsParams = {
+  make?: string;
+  available?: boolean;
+  limit?: number;
+  page?: number;
+};
+
+export type FetchCarsResponse = {
+  count: number;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  data: Car[];
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -26,9 +42,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function fetchCars(): Promise<Car[]> {
-  const result = await request<{ count: number; data: Car[] }>("/cars");
-  return result.data;
+export async function fetchCars(params?: FetchCarsParams): Promise<FetchCarsResponse> {
+  const query = new URLSearchParams();
+
+  if (params?.make) {
+    query.set("make", params.make);
+  }
+
+  if (params?.available !== undefined) {
+    query.set("available", String(params.available));
+  }
+
+  if (params?.limit !== undefined) {
+    query.set("limit", String(params.limit));
+  }
+
+  if (params?.page !== undefined) {
+    query.set("page", String(params.page));
+  }
+
+  const path = query.size > 0 ? `/cars?${query.toString()}` : "/cars";
+  return request<FetchCarsResponse>(path);
 }
 
 export function fetchCarById(id: number): Promise<Car> {

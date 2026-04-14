@@ -99,6 +99,14 @@ input {
   background: #fff;
 }
 
+select {
+  border: 1px solid var(--panel-border);
+  border-radius: 0.65rem;
+  padding: 0.6rem 0.7rem;
+  font: inherit;
+  background: #fff;
+}
+
 textarea {
   border: 1px solid var(--panel-border);
   border-radius: 0.65rem;
@@ -109,10 +117,44 @@ textarea {
 }
 
 input:focus-visible,
+select:focus-visible,
 textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 1px;
+}
+
+.filters-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+}
+
+.filters-grid label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.filters-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.results-summary {
+  color: var(--muted);
+  margin: 0.6rem 0 0;
+}
+
+.pagination-row {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 a {

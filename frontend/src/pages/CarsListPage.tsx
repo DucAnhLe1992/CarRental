@@ -3,19 +3,39 @@ import { Link } from "react-router-dom";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
 
+type AvailabilityFilter = "all" | "true" | "false";
+
 export default function CarsListPage() {
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [makeFilterInput, setMakeFilterInput] = useState("");
+  const [makeFilter, setMakeFilter] = useState("");
+  const [availableFilter, setAvailableFilter] = useState<AvailabilityFilter>("all");
+  const [limit, setLimit] = useState(10);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   async function loadCars(): Promise<void> {
     setLoading(true);
     setError(null);
 
     try {
-      const data = await fetchCars();
-      setCars(data);
+      const response = await fetchCars({
+        make: makeFilter || undefined,
+        available: availableFilter === "all" ? undefined : availableFilter === "true",
+        limit,
+        page,
+      });
+      setCars(response.data);
+      setTotal(response.total);
+      setTotalPages(response.totalPages);
+
+      if (response.totalPages > 0 && page > response.totalPages) {
+        setPage(response.totalPages);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load cars");
     } finally {
@@ -25,7 +45,7 @@ export default function CarsListPage() {
 
   useEffect(() => {
     void loadCars();
-  }, []);
+  }, [makeFilter, availableFilter, limit, page]);
 
   async function handleDelete(id: number): Promise<void> {
     setError(null);
@@ -40,6 +60,18 @@ export default function CarsListPage() {
     }
   }
 
+  function applyFilters(): void {
+    setPage(1);
+    setMakeFilter(makeFilterInput.trim());
+  }
+
+  function clearFilters(): void {
+    setPage(1);
+    setMakeFilterInput("");
+    setMakeFilter("");
+    setAvailableFilter("all");
+  }
+
   return (
     <section className="panel">
       <div className="list-header">
@@ -49,10 +81,65 @@ export default function CarsListPage() {
         </button>
       </div>
 
+      <div className="filters-grid">
+        <label>
+          Make
+          <input
+            value={makeFilterInput}
+            placeholder="e.g. Toyota"
+            onChange={(event) => setMakeFilterInput(event.target.value)}
+          />
+        </label>
+
+        <label>
+          Availability
+          <select
+            value={availableFilter}
+            onChange={(event) => {
+              setPage(1);
+              setAvailableFilter(event.target.value as AvailabilityFilter);
+            }}
+          >
+            <option value="all">All</option>
+            <option value="true">Available</option>
+            <option value="false">Unavailable</option>
+          </select>
+        </label>
+
+        <label>
+          Per page
+          <select
+            value={limit}
+            onChange={(event) => {
+              setPage(1);
+              setLimit(Number(event.target.value));
+            }}
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+          </select>
+        </label>
+
+        <div className="filters-actions">
+          <button type="button" onClick={applyFilters}>
+            Apply filters
+          </button>
+          <button type="button" className="ghost" onClick={clearFilters}>
+            Clear
+          </button>
+        </div>
+      </div>
+
       {loading ? <p>Loading cars...</p> : null}
       {error ? <p className="message error">{error}</p> : null}
       {notice ? <p className="message notice">{notice}</p> : null}
       {!loading && cars.length === 0 ? <p>No cars found.</p> : null}
+
+      <p className="results-summary">
+        Showing {cars.length} of {total} cars • Page {page} of {Math.max(totalPages, 1)}
+      </p>
 
       <ul className="car-list">
         {cars.map((car) => (
@@ -82,6 +169,28 @@ export default function CarsListPage() {
           </li>
         ))}
       </ul>
+
+      <div className="pagination-row">
+        <button
+          type="button"
+          className="ghost"
+          disabled={page <= 1 || loading}
+          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
+        >
+          Previous
+        </button>
+
+        <span>Page {page}</span>
+
+        <button
+          type="button"
+          className="ghost"
+          disabled={loading || totalPages === 0 || page >= totalPages}
+          onClick={() => setPage((prev) => prev + 1)}
+        >
+          Next
+        </button>
+      </div>
     </section>
   );
 }
