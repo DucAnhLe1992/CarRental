@@ -1,22 +1,63 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
 
 type AvailabilityFilter = "all" | "true" | "false";
 
+function parsePositiveInt(value: string | null, fallback: number): number {
+  if (!value) {
+    return fallback;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function parseAvailability(value: string | null): AvailabilityFilter {
+  if (value === "true" || value === "false") {
+    return value;
+  }
+
+  return "all";
+}
+
 export default function CarsListPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const initialMake = searchParams.get("make") ?? "";
+  const initialAvailable = parseAvailability(searchParams.get("available"));
+  const initialLimit = parsePositiveInt(searchParams.get("limit"), 10);
+  const initialPage = parsePositiveInt(searchParams.get("page"), 1);
+
   const [cars, setCars] = useState<Car[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [makeFilterInput, setMakeFilterInput] = useState("");
-  const [makeFilter, setMakeFilter] = useState("");
-  const [availableFilter, setAvailableFilter] = useState<AvailabilityFilter>("all");
-  const [limit, setLimit] = useState(10);
-  const [page, setPage] = useState(1);
+  const [makeFilterInput, setMakeFilterInput] = useState(initialMake);
+  const [makeFilter, setMakeFilter] = useState(initialMake);
+  const [availableFilter, setAvailableFilter] = useState<AvailabilityFilter>(initialAvailable);
+  const [limit, setLimit] = useState(initialLimit);
+  const [page, setPage] = useState(initialPage);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+
+    if (makeFilter) {
+      next.set("make", makeFilter);
+    }
+
+    if (availableFilter !== "all") {
+      next.set("available", availableFilter);
+    }
+
+    next.set("limit", String(limit));
+    next.set("page", String(page));
+
+    setSearchParams(next, { replace: true });
+  }, [makeFilter, availableFilter, limit, page, setSearchParams]);
 
   async function loadCars(): Promise<void> {
     setLoading(true);
