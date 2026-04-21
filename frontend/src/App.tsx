@@ -6,7 +6,7 @@ import CreateCarPage from "./pages/CreateCarPage";
 import EditDeleteCarPage from "./pages/EditDeleteCarPage";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
-import { useAuth } from "./context/AuthContext";
+import { useAuth } from "./context/useAuth";
 
 function App() {
   const { auth, logout } = useAuth();
@@ -30,7 +30,7 @@ function App() {
           </NavLink>
           {isAuthenticated ? (
             <NavLink to="/cars/new" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-              POST create car
+              Add car
             </NavLink>
           ) : null}
           {isAuthenticated ? (

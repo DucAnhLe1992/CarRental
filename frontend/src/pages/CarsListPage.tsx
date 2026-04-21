@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/useAuth";
 
 type AvailabilityFilter = "all" | "true" | "false";
 
@@ -207,7 +207,7 @@ export default function CarsListPage() {
               {isAuthenticated ? (
                 <>
                   <Link to={`/cars/${car.id}/edit`} className="button-link ghost-link">
-                    Edit/Delete
+                    Edit
                   </Link>
                   <button type="button" className="danger" onClick={() => void handleDelete(car.id)}>
                     Delete
