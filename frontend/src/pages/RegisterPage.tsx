@@ -1,6 +1,7 @@
 import { type FormEvent, useState } from "react";
-import { registerUser } from "../lib/api";
-import type { User } from "../types/user";
+import { useNavigate } from "react-router-dom";
+import { registerUser, loginUser, fetchMe } from "../lib/api";
+import { useAuth } from "../context/AuthContext";
 
 type FormState = {
   name: string;
@@ -19,10 +20,11 @@ function validatePassword(password: string): string[] {
 }
 
 export default function RegisterPage() {
+  const { setUser } = useAuth();
+  const navigate = useNavigate();
   const [form, setForm] = useState<FormState>(initialState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [registeredUser, setRegisteredUser] = useState<User | null>(null);
 
   const passwordErrors = validatePassword(form.password);
   const passwordTouched = form.password.length > 0;
@@ -33,12 +35,14 @@ export default function RegisterPage() {
 
     setSubmitting(true);
     setError(null);
-    setRegisteredUser(null);
 
     try {
-      const user = await registerUser(form);
-      setRegisteredUser(user);
-      setForm(initialState);
+      await registerUser(form);
+      // Auto-login after registration so the cookie gets set.
+      await loginUser({ email: form.email, password: form.password });
+      const user = await fetchMe();
+      setUser(user);
+      void navigate("/cars");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -57,12 +61,6 @@ export default function RegisterPage() {
       <h2>Register</h2>
 
       {error ? <p className="message error">{error}</p> : null}
-
-      {registeredUser ? (
-        <p className="message notice">
-          Account created for <strong>{registeredUser.name}</strong> ({registeredUser.email}).
-        </p>
-      ) : null}
 
       <form
         className="car-form"

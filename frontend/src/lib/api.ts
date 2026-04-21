@@ -1,5 +1,5 @@
 import type { Car, CarInput } from "../types/car";
-import type { User, RegisterInput } from "../types/user";
+import type { User, RegisterInput, LoginInput } from "../types/user";
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
@@ -21,6 +21,7 @@ export type FetchCarsResponse = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     ...init,
   });
@@ -93,4 +94,19 @@ export function registerUser(payload: RegisterInput): Promise<User> {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function loginUser(payload: LoginInput): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchMe(): Promise<User> {
+  return request<User>("/auth/me");
+}
+
+export function logoutUser(): Promise<{ message: string }> {
+  return request<{ message: string }>("/auth/logout", { method: "POST" });
 }

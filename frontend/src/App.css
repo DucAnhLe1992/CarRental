@@ -56,6 +56,14 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+.nav-link-button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  color: #f7fff9;
+  cursor: pointer;
+  font: inherit;
+}
+
 .layout {
   margin-top: 1.2rem;
   display: grid;

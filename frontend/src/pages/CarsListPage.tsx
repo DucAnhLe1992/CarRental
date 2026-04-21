@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
+import { useAuth } from "../context/AuthContext";
 
 type AvailabilityFilter = "all" | "true" | "false";
 
@@ -23,6 +24,8 @@ function parseAvailability(value: string | null): AvailabilityFilter {
 }
 
 export default function CarsListPage() {
+  const { auth } = useAuth();
+  const isAuthenticated = auth.status === "authenticated";
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialMake = searchParams.get("make") ?? "";
@@ -200,12 +203,16 @@ export default function CarsListPage() {
               <Link to={`/cars/${car.id}`} className="button-link ghost-link">
                 View
               </Link>
-              <Link to={`/cars/${car.id}/edit`} className="button-link ghost-link">
-                Edit/Delete
-              </Link>
-              <button type="button" className="danger" onClick={() => void handleDelete(car.id)}>
-                Delete
-              </button>
+              {isAuthenticated ? (
+                <>
+                  <Link to={`/cars/${car.id}/edit`} className="button-link ghost-link">
+                    Edit/Delete
+                  </Link>
+                  <button type="button" className="danger" onClick={() => void handleDelete(car.id)}>
+                    Delete
+                  </button>
+                </>
+              ) : null}
             </div>
           </li>
         ))}
