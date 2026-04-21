@@ -15,14 +15,20 @@ export function requireAuth(
   res: Response,
   next: NextFunction
 ): void {
+  // Prefer Authorization header; fall back to httpOnly cookie.
   const authHeader = req.headers.authorization;
+  let token: string | undefined;
 
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+  if (authHeader && authHeader.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else if (req.cookies?.token) {
+    token = req.cookies.token as string;
+  }
+
+  if (!token) {
     res.status(401).json({ message: "missing or malformed authorization header" });
     return;
   }
-
-  const token = authHeader.slice(7); // strip "Bearer "
 
   const secret = process.env.JWT_SECRET;
   if (!secret) {

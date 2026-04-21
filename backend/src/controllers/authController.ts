@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import type { UserInput } from "../types/user.js";
-import { findUserByEmail, loginUser, registerUser } from "../services/authService.js";
+import { findUserByEmail, getUserById, loginUser, registerUser } from "../services/authService.js";
 
 export async function register(
   req: Request<unknown, unknown, Partial<UserInput>>,
@@ -91,4 +91,27 @@ export async function login(
     }
     throw err;
   }
+}
+
+export async function me(req: Request, res: Response): Promise<Response> {
+  const userId = req.userId;
+  if (!userId) {
+    return res.status(401).json({ message: "not authenticated" });
+  }
+
+  const user = await getUserById(userId);
+  if (!user) {
+    return res.status(401).json({ message: "user not found" });
+  }
+
+  return res.status(200).json(user);
+}
+
+export function logout(_req: Request, res: Response): Response {
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "strict",
+  });
+  return res.status(200).json({ message: "Logged out" });
 }

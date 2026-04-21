@@ -68,3 +68,13 @@ export async function loginUser(
 
   return jwt.sign({ userId: row.id }, secret, { expiresIn: "7d" });
 }
+
+export async function getUserById(id: number): Promise<User | null> {
+  const rows = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.id, id))
+    .limit(1);
+
+  return rows[0] ? mapRowToUser(rows[0]) : null;
+}
