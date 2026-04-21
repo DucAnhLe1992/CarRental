@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import type { UserInput } from "../types/user.js";
-import { findUserByEmail, registerUser } from "../services/authService.js";
+import { findUserByEmail, loginUser, registerUser } from "../services/authService.js";
 
 export async function register(
   req: Request<unknown, unknown, Partial<UserInput>>,
@@ -53,4 +53,42 @@ export async function register(
   const user = await registerUser({ name, email, password });
 
   return res.status(201).json(user);
+}
+
+type LoginBody = { email?: string; password?: string };
+
+const COOKIE_NAME = "token";
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+
+export async function login(
+  req: Request<unknown, unknown, LoginBody>,
+  res: Response
+): Promise<Response> {
+  const { email, password } = req.body;
+
+  if (!email || typeof email !== "string" || email.trim() === "") {
+    return res.status(400).json({ message: "email is required" });
+  }
+
+  if (!password || typeof password !== "string") {
+    return res.status(400).json({ message: "password is required" });
+  }
+
+  try {
+    const token = await loginUser(email, password);
+
+    res.cookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: SEVEN_DAYS_MS,
+    });
+
+    return res.status(200).json({ message: "Login successful" });
+  } catch (err) {
+    if (err instanceof Error && err.message === "INVALID_CREDENTIALS") {
+      return res.status(401).json({ message: "invalid email or password" });
+    }
+    throw err;
+  }
 }

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db } from "../database/db.js";
 import { usersTable } from "../database/schema.js";
@@ -43,4 +44,27 @@ export async function registerUser(input: UserInput): Promise<User> {
     .returning();
 
   return mapRowToUser(rows[0]);
+}
+
+export async function loginUser(
+  email: string,
+  password: string
+): Promise<string> {
+  const row = await findUserByEmail(email.trim().toLowerCase());
+
+  if (!row) {
+    throw new Error("INVALID_CREDENTIALS");
+  }
+
+  const match = await bcrypt.compare(password, row.password);
+  if (!match) {
+    throw new Error("INVALID_CREDENTIALS");
+  }
+
+  const secret = process.env.JWT_SECRET;
+  if (!secret) {
+    throw new Error("JWT_SECRET is not configured");
+  }
+
+  return jwt.sign({ userId: row.id }, secret, { expiresIn: "7d" });
 }
