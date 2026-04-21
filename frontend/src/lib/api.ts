@@ -1,4 +1,5 @@
 import type { Car, CarInput } from "../types/car";
+import type { User, RegisterInput } from "../types/user";
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
@@ -85,4 +86,11 @@ export function updateCar(id: number, payload: CarInput): Promise<Car> {
 
 export function deleteCar(id: number): Promise<{ message: string }> {
   return request<{ message: string }>(`/cars/${id}`, { method: "DELETE" });
+}
+
+export function registerUser(payload: RegisterInput): Promise<User> {
+  return request<User>("/auth/register", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

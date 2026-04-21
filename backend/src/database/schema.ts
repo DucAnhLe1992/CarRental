@@ -26,3 +26,14 @@ export const carsTable = pgTable("cars", {
 
 export type InsertCar = typeof carsTable.$inferInsert;
 export type SelectCar = typeof carsTable.$inferSelect;
+
+export const usersTable = pgTable("users", {
+  id: serial("id").primaryKey(),
+  name: varchar("name").notNull(),
+  email: varchar("email").notNull().unique(),
+  password: varchar("password").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type InsertUser = typeof usersTable.$inferInsert;
+export type SelectUser = typeof usersTable.$inferSelect;

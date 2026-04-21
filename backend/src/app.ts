@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import carRoutes from "./routes/carRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
 
 const app = express();
 
@@ -12,5 +13,6 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/cars", carRoutes);
+app.use("/auth", authRoutes);
 
 export default app;
