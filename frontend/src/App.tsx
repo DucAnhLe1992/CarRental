@@ -23,13 +23,10 @@ function App() {
       <header className="hero">
         <p className="eyebrow">Rental Dashboard</p>
         <h1>Car Inventory</h1>
-        <p className="hero-subtitle">
-          Split into dedicated pages for each API action.
-        </p>
 
         <nav className="top-nav">
           <NavLink to="/cars" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-            GET all cars
+            See cars
           </NavLink>
           {isAuthenticated ? (
             <NavLink to="/cars/new" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>

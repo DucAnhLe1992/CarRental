@@ -1,12 +1,15 @@
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEventHandler } from "react";
 import type { CarFormState } from "../types/car";
+
+type FieldChangeEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
+type CheckboxChangeEvent = ChangeEvent<HTMLInputElement>;
 
 type CarFormProps = {
   form: CarFormState;
   submitting: boolean;
   submitLabel: string;
   onCancel?: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+  onSubmit: FormEventHandler<HTMLFormElement>;
   onChange: (next: CarFormState) => void;
 };
 
@@ -25,7 +28,7 @@ export default function CarForm({
         <input
           required
           value={form.make}
-          onChange={(event) => onChange({ ...form, make: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, make: event.currentTarget.value })}
         />
       </label>
 
@@ -34,7 +37,7 @@ export default function CarForm({
         <input
           required
           value={form.model}
-          onChange={(event) => onChange({ ...form, model: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, model: event.currentTarget.value })}
         />
       </label>
 
@@ -45,7 +48,7 @@ export default function CarForm({
           type="number"
           min={1900}
           value={form.year}
-          onChange={(event) => onChange({ ...form, year: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, year: event.currentTarget.value })}
         />
       </label>
 
@@ -54,7 +57,7 @@ export default function CarForm({
         <input
           required
           value={form.color}
-          onChange={(event) => onChange({ ...form, color: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, color: event.currentTarget.value })}
         />
       </label>
 
@@ -65,7 +68,7 @@ export default function CarForm({
           type="number"
           min={1}
           value={form.numberOfDoors}
-          onChange={(event) => onChange({ ...form, numberOfDoors: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, numberOfDoors: event.currentTarget.value })}
         />
       </label>
 
@@ -77,7 +80,7 @@ export default function CarForm({
           min={0}
           step="0.01"
           value={form.pricePerDay}
-          onChange={(event) => onChange({ ...form, pricePerDay: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, pricePerDay: event.currentTarget.value })}
         />
       </label>
 
@@ -86,7 +89,7 @@ export default function CarForm({
         <textarea
           rows={3}
           value={form.description}
-          onChange={(event) => onChange({ ...form, description: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, description: event.currentTarget.value })}
         />
       </label>
 
@@ -94,7 +97,7 @@ export default function CarForm({
         Image URL
         <input
           value={form.imageUrl}
-          onChange={(event) => onChange({ ...form, imageUrl: event.target.value })}
+          onChange={(event: FieldChangeEvent) => onChange({ ...form, imageUrl: event.currentTarget.value })}
         />
       </label>
 
@@ -102,7 +105,7 @@ export default function CarForm({
         <input
           type="checkbox"
           checked={form.available}
-          onChange={(event) => onChange({ ...form, available: event.target.checked })}
+          onChange={(event: CheckboxChangeEvent) => onChange({ ...form, available: event.currentTarget.checked })}
         />
         <span>Available for rental</span>
       </label>

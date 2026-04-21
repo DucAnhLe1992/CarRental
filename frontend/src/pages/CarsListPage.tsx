@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import type { ChangeEvent } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
@@ -62,7 +63,7 @@ export default function CarsListPage() {
     setSearchParams(next, { replace: true });
   }, [makeFilter, availableFilter, limit, page, setSearchParams]);
 
-  async function loadCars(): Promise<void> {
+  const loadCars = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
 
@@ -85,11 +86,11 @@ export default function CarsListPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [availableFilter, limit, makeFilter, page]);
 
   useEffect(() => {
     void loadCars();
-  }, [makeFilter, availableFilter, limit, page]);
+  }, [loadCars]);
 
   async function handleDelete(id: number): Promise<void> {
     setError(null);
@@ -131,7 +132,7 @@ export default function CarsListPage() {
           <input
             value={makeFilterInput}
             placeholder="e.g. Toyota"
-            onChange={(event) => setMakeFilterInput(event.target.value)}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => setMakeFilterInput(event.currentTarget.value)}
           />
         </label>
 
@@ -139,9 +140,9 @@ export default function CarsListPage() {
           Availability
           <select
             value={availableFilter}
-            onChange={(event) => {
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
               setPage(1);
-              setAvailableFilter(event.target.value as AvailabilityFilter);
+              setAvailableFilter(event.currentTarget.value as AvailabilityFilter);
             }}
           >
             <option value="all">All</option>
@@ -154,9 +155,9 @@ export default function CarsListPage() {
           Per page
           <select
             value={limit}
-            onChange={(event) => {
+            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
               setPage(1);
-              setLimit(Number(event.target.value));
+              setLimit(Number(event.currentTarget.value));
             }}
           >
             <option value={5}>5</option>

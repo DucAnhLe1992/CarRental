@@ -1,13 +1,13 @@
-import type { FormEvent } from "react";
+import type { SubmitEventHandler } from "react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import CarForm from "../components/CarForm";
-import { deleteCar, fetchCarById, updateCar } from "../lib/api";
+import { fetchCarById, updateCar } from "../lib/api";
 import { toCarFormState, toCarInput, type CarFormState } from "../types/car";
 
 export default function EditDeleteCarPage() {
-  const params = useParams();
   const navigate = useNavigate();
+  const params = useParams();
   const id = Number(params.id);
 
   const [form, setForm] = useState<CarFormState | null>(null);
@@ -39,7 +39,7 @@ export default function EditDeleteCarPage() {
     void loadCar();
   }, [id]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
+  const handleSubmit: SubmitEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
 
     if (!form || Number.isNaN(id)) {
@@ -58,28 +58,11 @@ export default function EditDeleteCarPage() {
     } finally {
       setSubmitting(false);
     }
-  }
-
-  async function handleDelete(): Promise<void> {
-    if (Number.isNaN(id)) {
-      return;
-    }
-
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      await deleteCar(id);
-      navigate("/cars");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete car");
-      setSubmitting(false);
-    }
-  }
+  };
 
   return (
     <section className="panel">
-      <h2>Edit or Delete Car</h2>
+      <h2>Edit Car</h2>
       {loading ? <p>Loading car...</p> : null}
       {error ? <p className="message error">{error}</p> : null}
       {notice ? <p className="message notice">{notice}</p> : null}
@@ -89,19 +72,11 @@ export default function EditDeleteCarPage() {
           <CarForm
             form={form}
             submitting={submitting}
-            submitLabel="Update"
-            onSubmit={(event) => void handleSubmit(event)}
+            submitLabel="Edit"
+            onCancel={() => navigate("/cars")}
+            onSubmit={handleSubmit}
             onChange={setForm}
           />
-
-          <div className="actions top-gap">
-            <button type="button" className="danger" disabled={submitting} onClick={() => void handleDelete()}>
-              Delete Car
-            </button>
-            <Link className="button-link ghost-link" to={`/cars/${id}`}>
-              View details
-            </Link>
-          </div>
         </>
       ) : null}
     </section>

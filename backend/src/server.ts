@@ -37,7 +37,6 @@ function getPortFromArgs(args: string[]): number | undefined {
 const PORT =
   getPortFromArgs(process.argv.slice(2)) ??
   parsePort(process.env.PORT) ??
-  parsePort(process.env.npm_config_port) ??
   3000;
 
 app.listen(PORT, () => {
