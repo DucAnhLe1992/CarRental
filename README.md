@@ -1,30 +1,30 @@
 # Car Rental Full Stack App
 
-A full-stack car rental management app with user authentication.
+A full-stack car rental management app with role-based authentication and booking management.
 
 - **Backend:** Node.js + Express + TypeScript, PostgreSQL via Neon + Drizzle ORM
-- **Frontend:** React + TypeScript, built with Vite
+- **Frontend:** React + TypeScript + MUI (Material UI v9), built with Vite
 
 ## Project structure
 
 ```
 ├── backend/          Express API server
 │   ├── src/
-│   │   ├── controllers/   Route handlers (carController, authController)
-│   │   ├── services/      Business logic (carService, authService)
-│   │   ├── routes/        Express routers (carRoutes, authRoutes)
-│   │   ├── middleware/    Auth middleware (requireAuth)
-│   │   ├── database/      Drizzle config, schema (cars + users tables)
-│   │   └── types/         Shared TypeScript types
+│   │   ├── controllers/   Route handlers (carController, authController, bookingController)
+│   │   ├── services/      Business logic (carService, authService, bookingService)
+│   │   ├── routes/        Express routers (carRoutes, authRoutes, bookingRoutes)
+│   │   ├── middleware/    Auth middleware (requireAuth, requireAdmin)
+│   │   ├── database/      Drizzle config, schema (cars, users, bookings tables)
+│   │   └── types/         Shared TypeScript types (car, user, booking)
 │   └── migrations/        Drizzle SQL migration files
 ├── frontend/         React client app
 │   └── src/
 │       ├── pages/         CarsListPage, CarDetailPage, CreateCarPage,
-│       │                  EditDeleteCarPage, LoginPage, RegisterPage
-│       ├── components/    CarForm
+│       │                  EditDeleteCarPage, LoginPage, RegisterPage, MyBookingsPage
+│       ├── components/    CarForm, NavButtonLink
 │       ├── context/       AuthContext (global session state)
 │       ├── lib/           api.ts (all fetch calls)
-│       └── types/         car.ts, user.ts
+│       └── types/         car.ts, user.ts, booking.ts
 ├── scripts/          dev.mjs — starts backend + frontend together
 └── package.json      Root workspace scripts
 ```
@@ -109,9 +109,9 @@ Base URL: `http://localhost:3000`
 |---|---|---|---|
 | `GET` | `/cars` | Public | List cars (filterable, paginated) |
 | `GET` | `/cars/:id` | Public | Get a single car |
-| `POST` | `/cars` | Required | Create a car |
-| `PUT` | `/cars/:id` | Required | Update a car |
-| `DELETE` | `/cars/:id` | Required | Delete a car |
+| `POST` | `/cars` | Admin | Create a car |
+| `PUT` | `/cars/:id` | Admin | Update a car |
+| `DELETE` | `/cars/:id` | Admin | Delete a car |
 
 `GET /cars` query parameters:
 
@@ -124,9 +124,9 @@ Base URL: `http://localhost:3000`
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/auth/register` | Public | Create a new user account |
+| `POST` | `/auth/register` | Public | Create a new user account (role = `customer`) |
 | `POST` | `/auth/login` | Public | Log in; sets a `token` cookie |
-| `GET` | `/auth/me` | Required | Return the current user's info |
+| `GET` | `/auth/me` | Required | Return the current user's info including role |
 | `POST` | `/auth/logout` | Public | Clear the `token` cookie |
 
 **Register** request body:
@@ -148,7 +148,30 @@ Protected routes accept the token in two ways (checked in order):
 1. `Authorization: Bearer <token>` header
 2. `token` httpOnly cookie (set automatically by the browser after login)
 
-Returns `401` if the token is missing, invalid, or expired.
+Returns `401` if the token is missing, invalid, or expired.  
+Returns `403` if the route requires `admin` role but the authenticated user is a `customer`.
+
+### Bookings
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/bookings` | Customer | Create a booking for a car |
+| `GET` | `/bookings` | Required | List bookings (customers see their own; admins see all) |
+| `GET` | `/bookings/:id` | Required | Get a single booking |
+| `POST` | `/bookings/:id/cancel` | Required | Cancel a booking (soft delete, sets status to `cancelled`) |
+
+`GET /bookings` query parameters:
+
+- `limit` — positive integer, default `10`
+- `page` — positive integer, default `1`
+
+**Create booking** request body:
+```json
+{ "carId": 1, "startDate": "2026-06-01", "endDate": "2026-06-05" }
+```
+Date format: `YYYY-MM-DD`. Start date must not be in the past. End date must be after start date.
+
+On success the response includes `totalPrice` (calculated as number of days × `pricePerDay`).
 
 ## Database schema
 
@@ -177,14 +200,31 @@ Returns `401` if the token is missing, invalid, or expired.
 | `name` | varchar | |
 | `email` | varchar | Unique |
 | `password` | varchar | Stored as bcrypt hash |
+| `role` | varchar | `admin` or `customer` (default `customer`) |
 | `created_at` | timestamp | Auto |
+
+### `bookings`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | serial | Primary key |
+| `car_id` | integer | FK → `cars.id` |
+| `user_id` | integer | FK → `users.id` |
+| `start_date` | date | |
+| `end_date` | date | Must be after `start_date` |
+| `total_price` | numeric | Calculated at creation |
+| `status` | varchar | `confirmed`, `cancelled`, or `completed` |
+| `created_at` | timestamp | Auto |
+
+A booking cannot overlap with another `confirmed` booking for the same car.
 
 Examples:
 
 - `GET /cars?make=Toyota&available=true`
 - `GET /cars?limit=10&page=2`
+- `GET /bookings?limit=5&page=1`
 
-Required payload fields for `POST` and `PUT`:
+Required payload fields for `POST` and `PUT /cars`:
 
 - `make` (string)
 - `model` (string)
