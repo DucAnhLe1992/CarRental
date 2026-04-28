@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import {
   AppBar,
   Box,
@@ -11,9 +11,7 @@ import {
   createTheme,
 } from "@mui/material";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
-import { AuthProvider } from "./context/AuthContext.tsx";
 import { useAuth } from "./context/useAuth";
-import { useNavigate } from "react-router-dom";
 import NavButtonLink from "./components/NavButtonLink";
 
 import CarsListPage from "./pages/CarsListPage";
@@ -99,11 +97,5 @@ function AppLayout() {
 }
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppLayout />
-      </AuthProvider>
-    </BrowserRouter>
-  );
+  return <AppLayout />;
 }

@@ -1,5 +1,4 @@
 import { and, count, desc, eq, lte, gte } from "drizzle-orm";
-import { clamp } from "lodash";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
 import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
@@ -97,7 +96,7 @@ export type PaginatedBookings = {
 };
 
 export async function getBookings(query: BookingListQuery): Promise<PaginatedBookings> {
-  const limit = clamp(query.limit, 1, 100);
+  const limit = Math.min(Math.max(query.limit, 1), 100);
   const page = Math.max(1, query.page);
   const offset = (page - 1) * limit;
 
