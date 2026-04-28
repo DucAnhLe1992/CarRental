@@ -35,6 +35,12 @@ export default function EditDeleteCarPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
+
+  useEffect(() => {
     if (Number.isNaN(id)) { setError("Invalid car id"); return; }
 
     async function loadCar(): Promise<void> {

@@ -1,4 +1,4 @@
-import type { FormEventHandler } from "react";
+import type { SubmitEventHandler } from "react";
 import {
   Box,
   Button,
@@ -14,7 +14,7 @@ type CarFormProps = {
   submitting: boolean;
   submitLabel: string;
   onCancel?: () => void;
-  onSubmit: FormEventHandler<HTMLFormElement>;
+  onSubmit: SubmitEventHandler<HTMLFormElement>;
   onChange: (next: CarFormState) => void;
 };
 

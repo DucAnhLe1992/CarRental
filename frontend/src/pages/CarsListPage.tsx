@@ -51,6 +51,12 @@ export default function CarsListPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
   const [makeFilterInput, setMakeFilterInput] = useState(initialMake);
   const [makeFilter, setMakeFilter] = useState(initialMake);
   const [availableFilter, setAvailableFilter] = useState<AvailabilityFilter>(initialAvailable);

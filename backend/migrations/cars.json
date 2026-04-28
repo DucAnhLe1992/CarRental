@@ -1128,5 +1128,60 @@
     "price_per_day": "82",
     "available": true,
     "description": "Toyota's first dedicated BEV with a yoke steering wheel concept, solar roof option, and 250-mile range."
+  },
+  {
+    "id": 101,
+    "make": "Porsche",
+    "model": "Cayenne",
+    "year": 2024,
+    "color": "Midnight Blue",
+    "number_of_doors": 4,
+    "price_per_day": "145",
+    "available": true,
+    "description": "High-performance luxury SUV blending sports car DNA with everyday versatility. Features a twin-turbocharged V6, adaptive air suspension, and a panoramic roof."
+  },
+  {
+    "id": 102,
+    "make": "Ferrari",
+    "model": "Roma",
+    "year": 2023,
+    "color": "Rosso Corsa",
+    "number_of_doors": 2,
+    "price_per_day": "450",
+    "available": true,
+    "description": "Elegant grand tourer with a mid-front-mounted twin-turbo V8, 620 hp, and timeless Italian coachwork."
+  },
+  {
+    "id": 103,
+    "make": "Lamborghini",
+    "model": "Urus",
+    "year": 2024,
+    "color": "Giallo Orion",
+    "number_of_doors": 4,
+    "price_per_day": "395",
+    "available": true,
+    "description": "The world's first Super SUV with a twin-turbo V8, 666 hp, and supercar-derived adaptive suspension."
+  },
+  {
+    "id": 104,
+    "make": "Rivian",
+    "model": "R1T",
+    "year": 2024,
+    "color": "Forest Green",
+    "number_of_doors": 4,
+    "price_per_day": "175",
+    "available": true,
+    "description": "All-electric adventure pickup with quad-motor AWD, 314-mile range, a gear tunnel, and camp kitchen option."
+  },
+  {
+    "id": 105,
+    "make": "Maserati",
+    "model": "Ghibli",
+    "year": 2022,
+    "color": "Grigio Maratea",
+    "number_of_doors": 4,
+    "price_per_day": "210",
+    "available": false,
+    "description": "Italian executive sedan with a Ferrari-built twin-turbo V6, roaring exhaust note, and handcrafted interior."
   }
 ]

@@ -51,7 +51,7 @@ function AppLayout() {
             CarRental
           </Typography>
 
-          <NavButtonLink to="/cars">Cars</NavButtonLink>
+          <NavButtonLink to="/cars" end>Cars</NavButtonLink>
           {isAdmin ? <NavButtonLink to="/cars/new">Add car</NavButtonLink> : null}
           {isAuthenticated ? (
             <NavButtonLink to="/bookings">
@@ -62,15 +62,25 @@ function AppLayout() {
           <Box sx={{ flexGrow: 1 }} />
 
           {isAuthenticated ? (
-            <Button
-              color="inherit"
-              size="small"
-              variant="outlined"
-              sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff" }}
-              onClick={() => void handleLogout()}
-            >
-              Logout
-            </Button>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box sx={{ textAlign: "right", lineHeight: 1.2 }}>
+                <Typography variant="body1" sx={{ fontWeight: 700, color: "#fff", fontSize: "1rem" }}>
+                  {auth.user.name}
+                </Typography>
+                <Typography variant="body1" sx={{ display: "block", color: isAdmin ? "#FFD54F" : "rgba(255,255,255,0.6)", fontSize: "0.8rem", textTransform: "capitalize" }}>
+                  {auth.user.role}
+                </Typography>
+              </Box>
+              <Button
+                color="inherit"
+                size="small"
+                variant="outlined"
+                sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff", whiteSpace: "nowrap" }}
+                onClick={() => void handleLogout()}
+              >
+                Logout
+              </Button>
+            </Box>
           ) : (
             <>
               <NavButtonLink to="/auth/login">Login</NavButtonLink>

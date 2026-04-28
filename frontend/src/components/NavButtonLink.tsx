@@ -2,11 +2,11 @@ import Button from "@mui/material/Button";
 import { NavLink } from "react-router-dom";
 import type { ReactNode } from "react";
 
-type Props = { to: string; children: ReactNode };
+type Props = { to: string; children: ReactNode; end?: boolean };
 
-export default function NavButtonLink({ to, children }: Props) {
+export default function NavButtonLink({ to, children, end }: Props) {
   return (
-    <NavLink to={to} style={{ textDecoration: "none" }}>
+    <NavLink to={to} end={end} style={{ textDecoration: "none" }}>
       {({ isActive }: { isActive: boolean }) => (
         <Button
           size="small"

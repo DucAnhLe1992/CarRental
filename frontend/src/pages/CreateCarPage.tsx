@@ -1,5 +1,5 @@
 import type { FormEventHandler } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Box, Card, CardContent, Typography } from "@mui/material";
 import { createCar } from "../lib/api";
 import CarForm from "../components/CarForm";
@@ -10,6 +10,12 @@ export default function CreateCarPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 4000);
+    return () => clearTimeout(t);
+  }, [notice]);
 
   const handleSubmit: FormEventHandler<HTMLFormElement> = async (event) => {
     event.preventDefault();
