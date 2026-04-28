@@ -17,6 +17,7 @@ export type Booking = {
   status: BookingStatus;
   createdAt: string | null;
   car: BookingCar | null;
+  customerName?: string;
 };
 
 export type BookingInput = {

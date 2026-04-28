@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchBookings } from "../lib/api";
+import { cancelBooking, fetchBookings } from "../lib/api";
 import type { Booking } from "../types/booking";
-
-function parsePositiveInt(value: string | null, fallback: number): number {
-  if (!value) return fallback;
-  const parsed = Number.parseInt(value, 10);
-  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
-}
+import { useAuth } from "../context/useAuth";
 
 export default function MyBookingsPage() {
+  const { auth } = useAuth();
+  const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
+
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [total, setTotal] = useState(0);
@@ -41,10 +40,24 @@ export default function MyBookingsPage() {
     void loadBookings();
   }, [loadBookings]);
 
+  async function handleCancel(id: number): Promise<void> {
+    setCancellingId(id);
+    try {
+      const updated = await cancelBooking(id);
+      setBookings((prev) =>
+        prev.map((b) => (b.id === updated.id ? { ...b, status: updated.status } : b))
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to cancel booking");
+    } finally {
+      setCancellingId(null);
+    }
+  }
+
   return (
     <section className="panel">
       <div className="list-header">
-        <h2>My Bookings</h2>
+        <h2>{isAdmin ? "All Bookings" : "My Bookings"}</h2>
         <button type="button" className="ghost" onClick={() => void loadBookings()}>
           Refresh
         </button>
@@ -72,6 +85,11 @@ export default function MyBookingsPage() {
               ) : (
                 <h3>Car #{booking.carId}</h3>
               )}
+              {isAdmin && booking.customerName ? (
+                <p style={{ fontSize: "0.85em", opacity: 0.7 }}>
+                  Customer: {booking.customerName}
+                </p>
+              ) : null}
               <p>
                 {booking.startDate} → {booking.endDate}
               </p>
@@ -91,6 +109,18 @@ export default function MyBookingsPage() {
                 <p style={{ fontSize: "0.85em", opacity: 0.6 }}>
                   Booked on {new Date(booking.createdAt).toLocaleDateString()}
                 </p>
+              ) : null}
+            </div>
+            <div className="item-actions">
+              {booking.status === "confirmed" ? (
+                <button
+                  type="button"
+                  className="danger"
+                  disabled={cancellingId === booking.id}
+                  onClick={() => void handleCancel(booking.id)}
+                >
+                  {cancellingId === booking.id ? "Cancelling…" : "Cancel"}
+                </button>
               ) : null}
             </div>
           </li>

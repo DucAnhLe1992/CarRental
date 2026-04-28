@@ -18,6 +18,7 @@ export type BookingWithCar = Booking & {
     year: number;
     pricePerDay: string;
   } | null;
+  customerName?: string;
 };
 
 export type BookingInput = {

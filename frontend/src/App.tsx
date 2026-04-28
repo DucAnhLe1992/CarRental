@@ -37,7 +37,7 @@ function App() {
           ) : null}
           {isAuthenticated ? (
             <NavLink to="/bookings" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-              My Bookings
+              {isAdmin ? "All Bookings" : "My Bookings"}
             </NavLink>
           ) : null}
           {isAuthenticated ? (

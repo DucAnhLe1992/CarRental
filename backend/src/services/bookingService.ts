@@ -2,7 +2,7 @@ import { and, count, desc, eq, lte, gte } from "drizzle-orm";
 import { clamp } from "lodash";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
-import { bookingsTable, carsTable, SelectBooking } from "../database/schema.js";
+import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
 import type { Booking, BookingWithCar } from "../types/booking.js";
 import type { UserRole } from "../types/user.js";
 
@@ -123,9 +123,11 @@ export async function getBookings(query: BookingListQuery): Promise<PaginatedBoo
       carModel: carsTable.model,
       carYear: carsTable.year,
       carPricePerDay: carsTable.pricePerDay,
+      customerName: usersTable.name,
     })
     .from(bookingsTable)
     .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+    .leftJoin(usersTable, eq(bookingsTable.userId, usersTable.id))
     .where(whereClause)
     .orderBy(desc(bookingsTable.id))
     .limit(limit)
@@ -151,6 +153,9 @@ export async function getBookings(query: BookingListQuery): Promise<PaginatedBoo
             pricePerDay: row.carPricePerDay!,
           }
         : null,
+    ...(query.role === "admin" && row.customerName
+      ? { customerName: row.customerName }
+      : {}),
   }));
 
   return {

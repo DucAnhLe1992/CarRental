@@ -119,6 +119,10 @@ export function createBooking(payload: BookingInput): Promise<Booking> {
   });
 }
 
+export function cancelBooking(id: number): Promise<Booking> {
+  return request<Booking>(`/bookings/${id}/cancel`, { method: "POST" });
+}
+
 export function fetchBookings(params?: { limit?: number; page?: number }): Promise<BookingsResponse> {
   const query = new URLSearchParams();
   if (params?.limit !== undefined) query.set("limit", String(params.limit));
