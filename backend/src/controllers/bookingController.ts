@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { isValid, parseISO, startOfDay, isAfter, isBefore, differenceInCalendarDays } from "date-fns";
-import { createBooking, getBookings } from "../services/bookingService.js";
+import { cancelBooking, createBooking, getBookingById, getBookings } from "../services/bookingService.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -128,4 +128,49 @@ export async function listBookings(
     totalPages: result.totalPages,
     data: result.data,
   });
+}
+
+export async function getBooking(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<Response> {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "booking id must be a valid integer" });
+  }
+
+  const booking = await getBookingById(id, req.userId!, req.userRole ?? "customer");
+
+  if (!booking) {
+    return res.status(404).json({ message: "booking not found" });
+  }
+
+  return res.status(200).json(booking);
+}
+
+export async function cancelBookingHandler(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<Response> {
+  const id = Number.parseInt(req.params.id, 10);
+
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "booking id must be a valid integer" });
+  }
+
+  try {
+    const booking = await cancelBooking(id, req.userId!, req.userRole ?? "customer");
+
+    if (!booking) {
+      return res.status(404).json({ message: "booking not found" });
+    }
+
+    return res.status(200).json(booking);
+  } catch (err) {
+    if (err instanceof Error && err.message === "ALREADY_CANCELLED") {
+      return res.status(409).json({ message: "booking is already cancelled" });
+    }
+    throw err;
+  }
 }

@@ -26,7 +26,7 @@ function parseAvailability(value: string | null): AvailabilityFilter {
 
 export default function CarsListPage() {
   const { auth } = useAuth();
-  const isAuthenticated = auth.status === "authenticated";
+  const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
   const [searchParams, setSearchParams] = useSearchParams();
 
   const initialMake = searchParams.get("make") ?? "";
@@ -204,7 +204,7 @@ export default function CarsListPage() {
               <Link to={`/cars/${car.id}`} className="button-link ghost-link">
                 View
               </Link>
-              {isAuthenticated ? (
+              {isAdmin ? (
                 <>
                   <Link to={`/cars/${car.id}/edit`} className="button-link ghost-link">
                     Edit

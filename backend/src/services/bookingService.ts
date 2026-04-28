@@ -161,3 +161,83 @@ export async function getBookings(query: BookingListQuery): Promise<PaginatedBoo
     totalPages: total === 0 ? 0 : Math.ceil(total / limit),
   };
 }
+
+export async function getBookingById(
+  id: number,
+  requesterId: number,
+  requesterRole: UserRole
+): Promise<BookingWithCar | null> {
+  const rows = await db
+    .select({
+      id: bookingsTable.id,
+      userId: bookingsTable.userId,
+      carId: bookingsTable.carId,
+      startDate: bookingsTable.startDate,
+      endDate: bookingsTable.endDate,
+      totalPrice: bookingsTable.totalPrice,
+      status: bookingsTable.status,
+      createdAt: bookingsTable.createdAt,
+      carMake: carsTable.make,
+      carModel: carsTable.model,
+      carYear: carsTable.year,
+      carPricePerDay: carsTable.pricePerDay,
+    })
+    .from(bookingsTable)
+    .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+    .where(eq(bookingsTable.id, id))
+    .limit(1);
+
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+
+  // Customers may only see their own bookings — return null so the caller issues 404.
+  if (requesterRole !== "admin" && row.userId !== requesterId) return null;
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    carId: row.carId,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    totalPrice: row.totalPrice,
+    status: row.status,
+    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
+    car:
+      row.carMake !== null
+        ? {
+            make: row.carMake,
+            model: row.carModel!,
+            year: row.carYear!,
+            pricePerDay: row.carPricePerDay!,
+          }
+        : null,
+  };
+}
+
+export async function cancelBooking(
+  id: number,
+  requesterId: number,
+  requesterRole: UserRole
+): Promise<BookingWithCar | null> {
+  // Fetch the booking first to check ownership and current status.
+  const existing = await getBookingById(id, requesterId, requesterRole);
+
+  // Returns null for not-found OR for a customer requesting someone else's booking.
+  if (!existing) return null;
+
+  if (existing.status === "cancelled") {
+    throw new Error("ALREADY_CANCELLED");
+  }
+
+  const rows = await db
+    .update(bookingsTable)
+    .set({ status: "cancelled" })
+    .where(eq(bookingsTable.id, id))
+    .returning();
+
+  return {
+    ...existing,
+    status: rows[0].status,
+  };
+}

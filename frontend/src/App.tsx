@@ -1,5 +1,4 @@
 import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
-import "./App.css";
 import CarDetailPage from "./pages/CarDetailPage";
 import CarsListPage from "./pages/CarsListPage";
 import CreateCarPage from "./pages/CreateCarPage";
@@ -7,11 +6,13 @@ import EditDeleteCarPage from "./pages/EditDeleteCarPage";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
 import { useAuth } from "./context/useAuth";
+import "./App.css";
 
 function App() {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
   const isAuthenticated = auth.status === "authenticated";
+  const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
 
   async function handleLogout(): Promise<void> {
     await logout();
@@ -28,7 +29,7 @@ function App() {
           <NavLink to="/cars" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
             See cars
           </NavLink>
-          {isAuthenticated ? (
+          {isAdmin ? (
             <NavLink to="/cars/new" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
               Add car
             </NavLink>

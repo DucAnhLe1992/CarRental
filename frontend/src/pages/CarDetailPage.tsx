@@ -6,7 +6,7 @@ import { useAuth } from "../context/useAuth";
 
 export default function CarDetailPage() {
   const { auth } = useAuth();
-  const isAuthenticated = auth.status === "authenticated";
+  const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
   const params = useParams();
   const id = Number(params.id);
   const [car, setCar] = useState<Car | null>(null);
@@ -63,7 +63,7 @@ export default function CarDetailPage() {
           <p>Updated: {car.updatedAt ? new Date(car.updatedAt).toLocaleString() : "N/A"}</p>
 
           <div className="actions">
-            {isAuthenticated ? (
+            {isAdmin ? (
               <Link className="button-link ghost-link" to={`/cars/${car.id}/edit`}>
                 Edit/Delete
               </Link>
