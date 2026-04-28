@@ -21,6 +21,7 @@ import EditDeleteCarPage from "./pages/EditDeleteCarPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import MyBookingsPage from "./pages/MyBookingsPage";
+import BookingDetailPage from "./pages/BookingDetailPage";
 
 const theme = createTheme({
   palette: {
@@ -99,6 +100,7 @@ function AppLayout() {
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/bookings" element={<MyBookingsPage />} />
+          <Route path="/bookings/:id" element={<BookingDetailPage />} />
           <Route path="*" element={<CarsListPage />} />
         </Routes>
       </Container>

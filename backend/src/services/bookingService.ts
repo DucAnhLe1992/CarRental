@@ -230,6 +230,7 @@ export async function cancelBooking(
   // Returns null for not-found OR for a customer requesting someone else's booking.
   if (!existing) return null;
 
+  // Consider implementing a try-catch and return a message to handle the error
   if (existing.status === "cancelled") {
     throw new Error("ALREADY_CANCELLED");
   }
