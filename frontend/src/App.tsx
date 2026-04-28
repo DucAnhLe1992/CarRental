@@ -5,6 +5,7 @@ import CreateCarPage from "./pages/CreateCarPage";
 import EditDeleteCarPage from "./pages/EditDeleteCarPage";
 import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
+import MyBookingsPage from "./pages/MyBookingsPage";
 import { useAuth } from "./context/useAuth";
 import "./App.css";
 
@@ -35,6 +36,11 @@ function App() {
             </NavLink>
           ) : null}
           {isAuthenticated ? (
+            <NavLink to="/bookings" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
+              My Bookings
+            </NavLink>
+          ) : null}
+          {isAuthenticated ? (
             <button
               type="button"
               className="nav-link nav-link-button"
@@ -62,6 +68,7 @@ function App() {
           <Route path="/cars/new" element={<CreateCarPage />} />
           <Route path="/cars/:id" element={<CarDetailPage />} />
           <Route path="/cars/:id/edit" element={<EditDeleteCarPage />} />
+          <Route path="/bookings" element={<MyBookingsPage />} />
           <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/cars" replace />} />

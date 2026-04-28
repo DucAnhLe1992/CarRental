@@ -1,5 +1,6 @@
 import type { Car, CarInput } from "../types/car";
 import type { User, RegisterInput, LoginInput } from "../types/user";
+import type { Booking, BookingInput, BookingsResponse } from "../types/booking";
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
@@ -109,4 +110,19 @@ export function fetchMe(): Promise<User> {
 
 export function logoutUser(): Promise<{ message: string }> {
   return request<{ message: string }>("/auth/logout", { method: "POST" });
+}
+
+export function createBooking(payload: BookingInput): Promise<Booking> {
+  return request<Booking>("/bookings", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchBookings(params?: { limit?: number; page?: number }): Promise<BookingsResponse> {
+  const query = new URLSearchParams();
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  if (params?.page !== undefined) query.set("page", String(params.page));
+  const path = query.size > 0 ? `/bookings?${query.toString()}` : "/bookings";
+  return request<BookingsResponse>(path);
 }
