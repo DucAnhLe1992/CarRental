@@ -42,6 +42,7 @@ export async function registerUser(input: UserInput): Promise<User> {
       name: input.name.trim(),
       email: input.email.trim().toLowerCase(),
       password: hashedPassword,
+      role: "customer",
     })
     .returning();
 

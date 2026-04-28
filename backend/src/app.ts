@@ -3,6 +3,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import carRoutes from "./routes/carRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import bookingRoutes from "./routes/bookingRoutes.js";
 
 const app = express();
 
@@ -19,5 +20,6 @@ app.get("/", (_req, res) => {
 
 app.use("/cars", carRoutes);
 app.use("/auth", authRoutes);
+app.use("/bookings", bookingRoutes);
 
 export default app;
