@@ -15,6 +15,13 @@
       "when": 1776758183554,
       "tag": "0001_solid_colonel_america",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1745827200000,
+      "tag": "0002_create_bookings_table",
+      "breakpoints": true
     }
   ]
 }

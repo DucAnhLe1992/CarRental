@@ -1,7 +1,10 @@
+export type UserRole = "admin" | "customer";
+
 export type User = {
   id: number;
   name: string;
   email: string;
+  role: UserRole;
   createdAt: string | null;
 };
 

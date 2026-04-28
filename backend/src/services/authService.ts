@@ -3,7 +3,7 @@ import jwt from "jsonwebtoken";
 import { eq } from "drizzle-orm";
 import { db } from "../database/db.js";
 import { usersTable } from "../database/schema.js";
-import type { User, UserInput } from "../types/user.js";
+import type { User, UserInput, UserRole } from "../types/user.js";
 
 const SALT_ROUNDS = 12;
 
@@ -11,12 +11,14 @@ function mapRowToUser(row: {
   id: number;
   name: string;
   email: string;
+  role: string;
   createdAt: Date | null;
 }): User {
   return {
     id: row.id,
     name: row.name,
     email: row.email,
+    role: row.role as UserRole,
     createdAt: row.createdAt ? row.createdAt.toISOString() : null,
   };
 }
@@ -66,7 +68,7 @@ export async function loginUser(
     throw new Error("JWT_SECRET is not configured");
   }
 
-  return jwt.sign({ userId: row.id }, secret, { expiresIn: "7d" });
+  return jwt.sign({ userId: row.id, role: row.role }, secret, { expiresIn: "7d" });
 }
 
 export async function getUserById(id: number): Promise<User | null> {

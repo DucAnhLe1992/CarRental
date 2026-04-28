@@ -1,11 +1,14 @@
 import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
-// Extend the Express Request type to carry the authenticated user's id.
+import type { UserRole } from "../types/user.js";
+
+// Extend the Express Request type to carry the authenticated user's id and role.
 declare global {
   namespace Express {
     interface Request {
       userId?: number;
+      userRole?: UserRole;
     }
   }
 }
@@ -37,10 +40,23 @@ export function requireAuth(
   }
 
   try {
-    const payload = jwt.verify(token, secret) as { userId: number };
+    const payload = jwt.verify(token, secret) as { userId: number; role: UserRole };
     req.userId = payload.userId;
+    req.userRole = payload.role;
     next();
   } catch {
     res.status(401).json({ message: "invalid or expired token" });
   }
+}
+
+export function requireAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (req.userRole !== "admin") {
+    res.status(403).json({ message: "forbidden: activity only reserved for admin users" });
+    return;
+  }
+  next();
 }
