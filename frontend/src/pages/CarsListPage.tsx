@@ -1,6 +1,25 @@
-import type { ChangeEvent } from "react";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  Chip,
+  CircularProgress,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Pagination,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import type { SelectChangeEvent } from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { deleteCar, fetchCars } from "../lib/api";
 import type { Car } from "../types/car";
 import { useAuth } from "../context/useAuth";
@@ -8,19 +27,13 @@ import { useAuth } from "../context/useAuth";
 type AvailabilityFilter = "all" | "true" | "false";
 
 function parsePositiveInt(value: string | null, fallback: number): number {
-  if (!value) {
-    return fallback;
-  }
-
+  if (!value) return fallback;
   const parsed = Number.parseInt(value, 10);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function parseAvailability(value: string | null): AvailabilityFilter {
-  if (value === "true" || value === "false") {
-    return value;
-  }
-
+  if (value === "true" || value === "false") return value;
   return "all";
 }
 
@@ -48,25 +61,16 @@ export default function CarsListPage() {
 
   useEffect(() => {
     const next = new URLSearchParams();
-
-    if (makeFilter) {
-      next.set("make", makeFilter);
-    }
-
-    if (availableFilter !== "all") {
-      next.set("available", availableFilter);
-    }
-
+    if (makeFilter) next.set("make", makeFilter);
+    if (availableFilter !== "all") next.set("available", availableFilter);
     next.set("limit", String(limit));
     next.set("page", String(page));
-
     setSearchParams(next, { replace: true });
   }, [makeFilter, availableFilter, limit, page, setSearchParams]);
 
   const loadCars = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
-
     try {
       const response = await fetchCars({
         make: makeFilter || undefined,
@@ -77,10 +81,7 @@ export default function CarsListPage() {
       setCars(response.data);
       setTotal(response.total);
       setTotalPages(response.totalPages);
-
-      if (response.totalPages > 0 && page > response.totalPages) {
-        setPage(response.totalPages);
-      }
+      if (response.totalPages > 0 && page > response.totalPages) setPage(response.totalPages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load cars");
     } finally {
@@ -88,14 +89,11 @@ export default function CarsListPage() {
     }
   }, [availableFilter, limit, makeFilter, page]);
 
-  useEffect(() => {
-    void loadCars();
-  }, [loadCars]);
+  useEffect(() => { void loadCars(); }, [loadCars]);
 
   async function handleDelete(id: number): Promise<void> {
     setError(null);
     setNotice(null);
-
     try {
       await deleteCar(id);
       setNotice(`Car #${id} deleted.`);
@@ -118,128 +116,127 @@ export default function CarsListPage() {
   }
 
   return (
-    <section className="panel">
-      <div className="list-header">
-        <h2>All Cars</h2>
-        <button type="button" className="ghost" onClick={() => void loadCars()}>
+    <Box>
+      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>All Cars</Typography>
+        <Button startIcon={<RefreshIcon />} onClick={() => void loadCars()} disabled={loading}>
           Refresh
-        </button>
-      </div>
+        </Button>
+      </Stack>
 
-      <div className="filters-grid">
-        <label>
-          Make
-          <input
-            value={makeFilterInput}
-            placeholder="e.g. Toyota"
-            onChange={(event: ChangeEvent<HTMLInputElement>) => setMakeFilterInput(event.currentTarget.value)}
-          />
-        </label>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3, flexWrap: "wrap" }}>
+        <TextField
+          label="Make"
+          size="small"
+          value={makeFilterInput}
+          placeholder="e.g. Toyota"
+          onChange={(e) => setMakeFilterInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") applyFilters(); }}
+          sx={{ minWidth: 160 }}
+        />
 
-        <label>
-          Availability
-          <select
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel>Availability</InputLabel>
+          <Select
+            label="Availability"
             value={availableFilter}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+            onChange={(e: SelectChangeEvent) => {
               setPage(1);
-              setAvailableFilter(event.currentTarget.value as AvailabilityFilter);
+              setAvailableFilter(e.target.value as AvailabilityFilter);
             }}
           >
-            <option value="all">All</option>
-            <option value="true">Available</option>
-            <option value="false">Unavailable</option>
-          </select>
-        </label>
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="true">Available</MenuItem>
+            <MenuItem value="false">Unavailable</MenuItem>
+          </Select>
+        </FormControl>
 
-        <label>
-          Per page
-          <select
-            value={limit}
-            onChange={(event: ChangeEvent<HTMLSelectElement>) => {
-              setPage(1);
-              setLimit(Number(event.currentTarget.value));
-            }}
+        <FormControl size="small" sx={{ minWidth: 110 }}>
+          <InputLabel>Per page</InputLabel>
+          <Select
+            label="Per page"
+            value={String(limit)}
+            onChange={(e: SelectChangeEvent) => { setPage(1); setLimit(Number(e.target.value)); }}
           >
-            <option value={5}>5</option>
-            <option value={10}>10</option>
-            <option value={20}>20</option>
-            <option value={50}>50</option>
-          </select>
-        </label>
+            {[5, 10, 20, 50].map((n) => (
+              <MenuItem key={n} value={n}>{n}</MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-        <div className="filters-actions">
-          <button type="button" onClick={applyFilters}>
-            Apply filters
-          </button>
-          <button type="button" className="ghost" onClick={clearFilters}>
-            Clear
-          </button>
-        </div>
-      </div>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+          <Button variant="contained" size="small" onClick={applyFilters}>Apply</Button>
+          <Button variant="outlined" size="small" onClick={clearFilters}>Clear</Button>
+        </Stack>
+      </Stack>
 
-      {loading ? <p>Loading cars...</p> : null}
-      {error ? <p className="message error">{error}</p> : null}
-      {notice ? <p className="message notice">{notice}</p> : null}
-      {!loading && cars.length === 0 ? <p>No cars found.</p> : null}
+      {loading ? <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}><CircularProgress /></Box> : null}
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {notice ? <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert> : null}
+      {!loading && cars.length === 0 && !error ? (
+        <Typography color="text.secondary">No cars found.</Typography>
+      ) : null}
 
-      <p className="results-summary">
-        Showing {cars.length} of {total} cars • Page {page} of {Math.max(totalPages, 1)}
-      </p>
+      {!loading && cars.length > 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Showing {cars.length} of {total} cars • Page {page} of {Math.max(totalPages, 1)}
+        </Typography>
+      ) : null}
 
-      <ul className="car-list">
+      <Stack spacing={2}>
         {cars.map((car) => (
-          <li key={car.id} className="car-item">
-            <div>
-              <h3>
-                {car.make} {car.model}
-              </h3>
-              <p>
-                {car.year} • {car.color} • {car.numberOfDoors} doors
-              </p>
-              <p>
-                ${car.pricePerDay}/day • {car.available ? "Available" : "Unavailable"}
-              </p>
-            </div>
-            <div className="item-actions">
-              <Link to={`/cars/${car.id}`} className="button-link ghost-link">
-                View
-              </Link>
+          <Card key={car.id} variant="outlined">
+            <CardContent sx={{ pb: 1 }}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 1 }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                    {car.make} {car.model}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {car.year} • {car.color} • {car.numberOfDoors} doors
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    ${car.pricePerDay}/day
+                  </Typography>
+                </Box>
+                <Chip
+                  label={car.available ? "Available" : "Unavailable"}
+                  color={car.available ? "success" : "default"}
+                  size="small"
+                  variant="outlined"
+                />
+              </Stack>
+            </CardContent>
+            <CardActions sx={{ pt: 0, gap: 1 }}>
+              <Button size="small" component={Link} to={`/cars/${car.id}`}>View</Button>
               {isAdmin ? (
                 <>
-                  <Link to={`/cars/${car.id}/edit`} className="button-link ghost-link">
-                    Edit
-                  </Link>
-                  <button type="button" className="danger" onClick={() => void handleDelete(car.id)}>
+                  <Button size="small" component={Link} to={`/cars/${car.id}/edit`}>Edit</Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    onClick={() => void handleDelete(car.id)}
+                  >
                     Delete
-                  </button>
+                  </Button>
                 </>
               ) : null}
-            </div>
-          </li>
+            </CardActions>
+          </Card>
         ))}
-      </ul>
+      </Stack>
 
-      <div className="pagination-row">
-        <button
-          type="button"
-          className="ghost"
-          disabled={page <= 1 || loading}
-          onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-        >
-          Previous
-        </button>
-
-        <span>Page {page}</span>
-
-        <button
-          type="button"
-          className="ghost"
-          disabled={loading || totalPages === 0 || page >= totalPages}
-          onClick={() => setPage((prev) => prev + 1)}
-        >
-          Next
-        </button>
-      </div>
-    </section>
+      {totalPages > 1 ? (
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(_e, value) => setPage(value)}
+            color="primary"
+            disabled={loading}
+          />
+        </Box>
+      ) : null}
+    </Box>
   );
 }

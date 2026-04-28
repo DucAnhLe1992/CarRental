@@ -1,7 +1,28 @@
 import { useCallback, useEffect, useState } from "react";
+import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  CardActions,
+  CardContent,
+  Chip,
+  CircularProgress,
+  Pagination,
+  Stack,
+  Typography,
+} from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { cancelBooking, fetchBookings } from "../lib/api";
 import type { Booking } from "../types/booking";
 import { useAuth } from "../context/useAuth";
+
+function statusColor(status: string): "success" | "error" | "default" | "warning" {
+  if (status === "confirmed") return "success";
+  if (status === "cancelled") return "error";
+  if (status === "completed") return "default";
+  return "warning";
+}
 
 export default function MyBookingsPage() {
   const { auth } = useAuth();
@@ -19,16 +40,12 @@ export default function MyBookingsPage() {
   const loadBookings = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
-
     try {
       const response = await fetchBookings({ limit, page });
       setBookings(response.data);
       setTotal(response.total);
       setTotalPages(response.totalPages);
-
-      if (response.totalPages > 0 && page > response.totalPages) {
-        setPage(response.totalPages);
-      }
+      if (response.totalPages > 0 && page > response.totalPages) setPage(response.totalPages);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load bookings");
     } finally {
@@ -36,9 +53,7 @@ export default function MyBookingsPage() {
     }
   }, [limit, page]);
 
-  useEffect(() => {
-    void loadBookings();
-  }, [loadBookings]);
+  useEffect(() => { void loadBookings(); }, [loadBookings]);
 
   async function handleCancel(id: number): Promise<void> {
     setCancellingId(id);
@@ -55,99 +70,94 @@ export default function MyBookingsPage() {
   }
 
   return (
-    <section className="panel">
-      <div className="list-header">
-        <h2>{isAdmin ? "All Bookings" : "My Bookings"}</h2>
-        <button type="button" className="ghost" onClick={() => void loadBookings()}>
+    <Box>
+      <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 700 }}>
+          {isAdmin ? "All Bookings" : "My Bookings"}
+        </Typography>
+        <Button startIcon={<RefreshIcon />} onClick={() => void loadBookings()} disabled={loading}>
           Refresh
-        </button>
-      </div>
+        </Button>
+      </Stack>
 
-      {loading ? <p>Loading bookings...</p> : null}
-      {error ? <p className="message error">{error}</p> : null}
-      {!loading && bookings.length === 0 ? <p>No bookings found.</p> : null}
-
-      {bookings.length > 0 ? (
-        <p className="results-summary">
-          Showing {bookings.length} of {total} bookings • Page {page} of{" "}
-          {Math.max(totalPages, 1)}
-        </p>
+      {loading ? <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}><CircularProgress /></Box> : null}
+      {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {!loading && bookings.length === 0 && !error ? (
+        <Typography color="text.secondary">No bookings found.</Typography>
       ) : null}
 
-      <ul className="car-list">
+      {!loading && bookings.length > 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Showing {bookings.length} of {total} bookings • Page {page} of {Math.max(totalPages, 1)}
+        </Typography>
+      ) : null}
+
+      <Stack spacing={2}>
         {bookings.map((booking) => (
-          <li key={booking.id} className="car-item">
-            <div>
-              {booking.car ? (
-                <h3>
-                  {booking.car.make} {booking.car.model} ({booking.car.year})
-                </h3>
-              ) : (
-                <h3>Car #{booking.carId}</h3>
-              )}
-              {isAdmin && booking.customerName ? (
-                <p style={{ fontSize: "0.85em", opacity: 0.7 }}>
-                  Customer: {booking.customerName}
-                </p>
-              ) : null}
-              <p>
-                {booking.startDate} → {booking.endDate}
-              </p>
-              <p>
-                Total: ${booking.totalPrice} •{" "}
-                <span
-                  style={{
-                    textTransform: "capitalize",
-                    fontWeight: booking.status === "cancelled" ? "normal" : "bold",
-                    opacity: booking.status === "cancelled" ? 0.5 : 1,
-                  }}
-                >
-                  {booking.status}
-                </span>
-              </p>
-              {booking.createdAt ? (
-                <p style={{ fontSize: "0.85em", opacity: 0.6 }}>
-                  Booked on {new Date(booking.createdAt).toLocaleDateString()}
-                </p>
-              ) : null}
-            </div>
-            <div className="item-actions">
-              {booking.status === "confirmed" ? (
-                <button
-                  type="button"
-                  className="danger"
+          <Card key={booking.id} variant="outlined">
+            <CardContent sx={{ pb: 1 }}>
+              <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 1 }}>
+                <Box>
+                  {booking.car ? (
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      {booking.car.make} {booking.car.model} ({booking.car.year})
+                    </Typography>
+                  ) : (
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>Car #{booking.carId}</Typography>
+                  )}
+                  {isAdmin && booking.customerName ? (
+                    <Typography variant="body2" color="text.secondary">
+                      Customer: {booking.customerName}
+                    </Typography>
+                  ) : null}
+                  <Typography variant="body2" color="text.secondary">
+                    {booking.startDate} → {booking.endDate}
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Total: ${booking.totalPrice}
+                  </Typography>
+                  {booking.createdAt ? (
+                    <Typography variant="caption" color="text.secondary">
+                      Booked on {new Date(booking.createdAt).toLocaleDateString()}
+                    </Typography>
+                  ) : null}
+                </Box>
+                <Chip
+                  label={booking.status}
+                  color={statusColor(booking.status)}
+                  size="small"
+                  variant="outlined"
+                  sx={{ textTransform: "capitalize" }}
+                />
+              </Stack>
+            </CardContent>
+            {booking.status === "confirmed" ? (
+              <CardActions sx={{ pt: 0 }}>
+                <Button
+                  size="small"
+                  color="error"
                   disabled={cancellingId === booking.id}
                   onClick={() => void handleCancel(booking.id)}
                 >
-                  {cancellingId === booking.id ? "Cancelling…" : "Cancel"}
-                </button>
-              ) : null}
-            </div>
-          </li>
+                  {cancellingId === booking.id ? "Cancelling…" : "Cancel booking"}
+                </Button>
+              </CardActions>
+            ) : null}
+          </Card>
         ))}
-      </ul>
+      </Stack>
 
       {totalPages > 1 ? (
-        <div className="pagination-row">
-          <button
-            type="button"
-            className="ghost"
-            disabled={page <= 1 || loading}
-            onClick={() => setPage((prev) => Math.max(1, prev - 1))}
-          >
-            Previous
-          </button>
-          <span>Page {page}</span>
-          <button
-            type="button"
-            className="ghost"
-            disabled={loading || totalPages === 0 || page >= totalPages}
-            onClick={() => setPage((prev) => prev + 1)}
-          >
-            Next
-          </button>
-        </div>
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(_e, value) => setPage(value)}
+            color="primary"
+            disabled={loading}
+          />
+        </Box>
       ) : null}
-    </section>
+    </Box>
   );
 }

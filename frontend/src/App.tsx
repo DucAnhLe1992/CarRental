@@ -1,15 +1,38 @@
-import { Navigate, NavLink, Route, Routes, useNavigate } from "react-router-dom";
-import CarDetailPage from "./pages/CarDetailPage";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+import {
+  AppBar,
+  Box,
+  Button,
+  Container,
+  CssBaseline,
+  ThemeProvider,
+  Toolbar,
+  Typography,
+  createTheme,
+} from "@mui/material";
+import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import { AuthProvider } from "./context/AuthContext.tsx";
+import { useAuth } from "./context/useAuth";
+import { useNavigate } from "react-router-dom";
+import NavButtonLink from "./components/NavButtonLink";
+
 import CarsListPage from "./pages/CarsListPage";
+import CarDetailPage from "./pages/CarDetailPage";
 import CreateCarPage from "./pages/CreateCarPage";
 import EditDeleteCarPage from "./pages/EditDeleteCarPage";
-import RegisterPage from "./pages/RegisterPage";
 import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 import MyBookingsPage from "./pages/MyBookingsPage";
-import { useAuth } from "./context/useAuth";
-import "./App.css";
 
-function App() {
+const theme = createTheme({
+  palette: {
+    primary: { main: "#1565C0" },
+    secondary: { main: "#FF8F00" },
+  },
+  shape: { borderRadius: 10 },
+});
+
+function AppLayout() {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
   const isAuthenticated = auth.status === "authenticated";
@@ -17,65 +40,70 @@ function App() {
 
   async function handleLogout(): Promise<void> {
     await logout();
-    void navigate("/cars");
+    void navigate("/auth/login");
   }
 
   return (
-    <div className="page">
-      <header className="hero">
-        <p className="eyebrow">Rental Dashboard</p>
-        <h1>Car Inventory</h1>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <AppBar position="sticky">
+        <Toolbar sx={{ gap: 1 }}>
+          <DirectionsCarIcon sx={{ mr: 1 }} />
+          <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 0, mr: 2 }}>
+            CarRental
+          </Typography>
 
-        <nav className="top-nav">
-          <NavLink to="/cars" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-            See cars
-          </NavLink>
-          {isAdmin ? (
-            <NavLink to="/cars/new" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-              Add car
-            </NavLink>
-          ) : null}
+          <NavButtonLink to="/cars">Cars</NavButtonLink>
+          {isAdmin ? <NavButtonLink to="/cars/new">Add car</NavButtonLink> : null}
           {isAuthenticated ? (
-            <NavLink to="/bookings" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
+            <NavButtonLink to="/bookings">
               {isAdmin ? "All Bookings" : "My Bookings"}
-            </NavLink>
+            </NavButtonLink>
           ) : null}
+
+          <Box sx={{ flexGrow: 1 }} />
+
           {isAuthenticated ? (
-            <button
-              type="button"
-              className="nav-link nav-link-button"
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff" }}
               onClick={() => void handleLogout()}
             >
-              Logout ({auth.user.name})
-            </button>
+              Logout
+            </Button>
           ) : (
             <>
-              <NavLink to="/auth/login" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-                Login
-              </NavLink>
-              <NavLink to="/auth/register" className={({ isActive }) => (isActive ? "nav-link active" : "nav-link")}>
-                Register
-              </NavLink>
+              <NavButtonLink to="/auth/login">Login</NavButtonLink>
+              <NavButtonLink to="/auth/register">Register</NavButtonLink>
             </>
           )}
-        </nav>
-      </header>
+        </Toolbar>
+      </AppBar>
 
-      <main className="layout single-column">
+      <Container maxWidth="lg" sx={{ py: 4 }}>
         <Routes>
-          <Route path="/" element={<Navigate to="/cars" replace />} />
           <Route path="/cars" element={<CarsListPage />} />
           <Route path="/cars/new" element={<CreateCarPage />} />
           <Route path="/cars/:id" element={<CarDetailPage />} />
           <Route path="/cars/:id/edit" element={<EditDeleteCarPage />} />
-          <Route path="/bookings" element={<MyBookingsPage />} />
-          <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/auth/login" element={<LoginPage />} />
-          <Route path="*" element={<Navigate to="/cars" replace />} />
+          <Route path="/auth/register" element={<RegisterPage />} />
+          <Route path="/bookings" element={<MyBookingsPage />} />
+          <Route path="*" element={<CarsListPage />} />
         </Routes>
-      </main>
-    </div>
+      </Container>
+    </ThemeProvider>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <AppLayout />
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
