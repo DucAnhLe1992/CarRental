@@ -1,12 +1,13 @@
 import type { Request, Response } from "express";
-import { createBooking } from "../services/bookingService.js";
+import { isValid, parseISO, startOfDay, isAfter, isBefore, differenceInCalendarDays } from "date-fns";
+import { createBooking, getBookings } from "../services/bookingService.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function isValidDate(value: string): boolean {
-  if (!ISO_DATE_RE.test(value)) return false;
-  const d = new Date(value);
-  return !isNaN(d.getTime());
+function parseDate(value: string): Date | null {
+  if (!ISO_DATE_RE.test(value)) return null;
+  const d = parseISO(value);
+  return isValid(d) ? d : null;
 }
 
 type CreateBookingBody = {
@@ -25,26 +26,39 @@ export async function bookCar(
     return res.status(400).json({ message: "carId must be a positive integer" });
   }
 
-  if (!startDate || typeof startDate !== "string" || !isValidDate(startDate)) {
+  if (!startDate || typeof startDate !== "string") {
     return res
       .status(400)
       .json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
   }
 
-  if (!endDate || typeof endDate !== "string" || !isValidDate(endDate)) {
+  if (!endDate || typeof endDate !== "string") {
     return res
       .status(400)
       .json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
   }
 
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
+  const parsedStart = parseDate(startDate);
+  if (!parsedStart) {
+    return res
+      .status(400)
+      .json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
 
-  if (new Date(startDate) < today) {
+  const parsedEnd = parseDate(endDate);
+  if (!parsedEnd) {
+    return res
+      .status(400)
+      .json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
+
+  const today = startOfDay(new Date());
+
+  if (isBefore(parsedStart, today)) {
     return res.status(400).json({ message: "startDate must not be in the past" });
   }
 
-  if (new Date(endDate) < new Date(startDate)) {
+  if (isBefore(parsedEnd, parsedStart)) {
     return res
       .status(400)
       .json({ message: "endDate must be on or after startDate" });
@@ -74,4 +88,44 @@ export async function bookCar(
     }
     throw err;
   }
+}
+
+type BookingListQueryParams = {
+  limit?: string;
+  page?: string;
+};
+
+export async function listBookings(
+  req: Request<unknown, unknown, unknown, BookingListQueryParams>,
+  res: Response
+): Promise<Response> {
+  const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
+  const pageRaw = typeof req.query.page === "string" ? req.query.page : undefined;
+
+  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 10;
+  const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
+
+  if (!Number.isInteger(limit) || limit <= 0) {
+    return res.status(400).json({ message: "limit must be a positive integer" });
+  }
+
+  if (!Number.isInteger(page) || page <= 0) {
+    return res.status(400).json({ message: "page must be a positive integer" });
+  }
+
+  const result = await getBookings({
+    userId: req.userId!,
+    role: req.userRole ?? "customer",
+    limit,
+    page,
+  });
+
+  return res.status(200).json({
+    count: result.data.length,
+    total: result.total,
+    page: result.page,
+    limit: result.limit,
+    totalPages: result.totalPages,
+    data: result.data,
+  });
 }

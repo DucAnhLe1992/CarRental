@@ -1,7 +1,10 @@
-import { and, eq, lte, gte } from "drizzle-orm";
+import { and, count, desc, eq, lte, gte } from "drizzle-orm";
+import { clamp } from "lodash";
+import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
 import { bookingsTable, carsTable, SelectBooking } from "../database/schema.js";
-import type { Booking } from "../types/booking.js";
+import type { Booking, BookingWithCar } from "../types/booking.js";
+import type { UserRole } from "../types/user.js";
 
 function mapRowToBooking(row: SelectBooking): Booking {
   return {
@@ -59,11 +62,7 @@ export async function createBooking(
   }
 
   // Inclusive day count: endDate - startDate + 1
-  const msPerDay = 24 * 60 * 60 * 1000;
-  const days =
-    Math.round(
-      (new Date(endDate).getTime() - new Date(startDate).getTime()) / msPerDay
-    ) + 1;
+  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
 
   const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
 
@@ -80,4 +79,85 @@ export async function createBooking(
     .returning();
 
   return mapRowToBooking(rows[0]);
+}
+
+export type BookingListQuery = {
+  userId: number;
+  role: UserRole;
+  limit: number;
+  page: number;
+};
+
+export type PaginatedBookings = {
+  data: BookingWithCar[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+};
+
+export async function getBookings(query: BookingListQuery): Promise<PaginatedBookings> {
+  const limit = clamp(query.limit, 1, 100);
+  const page = Math.max(1, query.page);
+  const offset = (page - 1) * limit;
+
+  const whereClause =
+    query.role === "admin" ? undefined : eq(bookingsTable.userId, query.userId);
+
+  const [totalResult] = await db
+    .select({ total: count() })
+    .from(bookingsTable)
+    .where(whereClause);
+
+  const rows = await db
+    .select({
+      id: bookingsTable.id,
+      userId: bookingsTable.userId,
+      carId: bookingsTable.carId,
+      startDate: bookingsTable.startDate,
+      endDate: bookingsTable.endDate,
+      totalPrice: bookingsTable.totalPrice,
+      status: bookingsTable.status,
+      createdAt: bookingsTable.createdAt,
+      carMake: carsTable.make,
+      carModel: carsTable.model,
+      carYear: carsTable.year,
+      carPricePerDay: carsTable.pricePerDay,
+    })
+    .from(bookingsTable)
+    .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+    .where(whereClause)
+    .orderBy(desc(bookingsTable.id))
+    .limit(limit)
+    .offset(offset);
+
+  const total = Number(totalResult?.total ?? 0);
+
+  const data: BookingWithCar[] = rows.map((row) => ({
+    id: row.id,
+    userId: row.userId,
+    carId: row.carId,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    totalPrice: row.totalPrice,
+    status: row.status,
+    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
+    car:
+      row.carMake !== null
+        ? {
+            make: row.carMake,
+            model: row.carModel!,
+            year: row.carYear!,
+            pricePerDay: row.carPricePerDay!,
+          }
+        : null,
+  }));
+
+  return {
+    data,
+    total,
+    page,
+    limit,
+    totalPages: total === 0 ? 0 : Math.ceil(total / limit),
+  };
 }

@@ -42,7 +42,7 @@ export const usersTable = pgTable("users", {
 export type InsertUser = typeof usersTable.$inferInsert;
 export type SelectUser = typeof usersTable.$inferSelect;
 
-export type BookingStatus = "pending" | "confirmed" | "cancelled" | "completed";
+export type BookingStatus = "pending" | "confirmed" | "cancelled";
 
 export const bookingsTable = pgTable(
   "bookings",
@@ -61,7 +61,7 @@ export const bookingsTable = pgTable(
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [
-    check("bookings_status_check", sql`${t.status} IN ('pending', 'confirmed', 'cancelled', 'completed')`),
+    check("bookings_status_check", sql`${t.status} IN ('pending', 'confirmed', 'cancelled')`),
     check("bookings_dates_check", sql`${t.endDate} >= ${t.startDate}`),
   ]
 );

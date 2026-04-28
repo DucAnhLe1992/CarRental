@@ -11,6 +11,15 @@ export type Booking = {
   createdAt: string | null;
 };
 
+export type BookingWithCar = Booking & {
+  car: {
+    make: string;
+    model: string;
+    year: number;
+    pricePerDay: string;
+  } | null;
+};
+
 export type BookingInput = {
   carId: number;
   startDate: string;
