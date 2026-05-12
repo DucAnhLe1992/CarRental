@@ -1,0 +1,117 @@
+### ============================================================
+### CarRental API — REST Client requests
+### Install the "REST Client" VS Code extension (humao.rest-client)
+### then click "Send Request" above any ### block.
+### ============================================================
+
+@baseUrl = http://localhost:3000
+@contentType = application/json
+
+# ── After logging in, copy the token value from the Set-Cookie header
+# ── and paste it below (REST Client doesn't auto-send httpOnly cookies
+# ── across requests, so we pass the JWT manually for convenience).
+@token = PASTE_JWT_HERE
+
+
+### ── Health check ─────────────────────────────────────────────
+GET {{baseUrl}}/
+
+
+### ── Auth: Register (creates a customer account) ──────────────
+POST {{baseUrl}}/auth/register
+Content-Type: {{contentType}}
+
+{
+  "name": "Alice Demo",
+  "email": "alice@example.com",
+  "password": "Password123!"
+}
+
+
+### ── Auth: Login ───────────────────────────────────────────────
+# After sending, copy the JWT from the Set-Cookie response header
+# and update the @token variable above.
+POST {{baseUrl}}/auth/login
+Content-Type: {{contentType}}
+
+{
+  "email": "alice@example.com",
+  "password": "Password123!"
+}
+
+
+### ── Auth: Me (requires auth) ──────────────────────────────────
+GET {{baseUrl}}/auth/me
+Cookie: token={{token}}
+
+
+### ── Auth: Logout ──────────────────────────────────────────────
+POST {{baseUrl}}/auth/logout
+Cookie: token={{token}}
+
+
+### ── Cars: List all ────────────────────────────────────────────
+GET {{baseUrl}}/cars
+
+
+### ── Cars: Get by ID ───────────────────────────────────────────
+GET {{baseUrl}}/cars/1
+
+
+### ── Cars: Create (admin only) ─────────────────────────────────
+POST {{baseUrl}}/cars
+Content-Type: {{contentType}}
+Cookie: token={{token}}
+
+{
+  "make": "Toyota",
+  "model": "Camry",
+  "year": 2024,
+  "pricePerDay": "75.00",
+  "available": true
+}
+
+
+### ── Cars: Update (admin only) ─────────────────────────────────
+PUT {{baseUrl}}/cars/1
+Content-Type: {{contentType}}
+Cookie: token={{token}}
+
+{
+  "pricePerDay": "80.00",
+  "available": true
+}
+
+
+### ── Cars: Delete (admin only) ─────────────────────────────────
+DELETE {{baseUrl}}/cars/1
+Cookie: token={{token}}
+
+
+### ── Bookings: Create ──────────────────────────────────────────
+# Change carId / dates as needed. This is the request used by
+# the race-condition script below.
+POST {{baseUrl}}/bookings
+Content-Type: {{contentType}}
+Cookie: token={{token}}
+
+{
+  "carId": 1,
+  "startDate": "2026-08-01",
+  "endDate": "2026-08-05"
+}
+
+
+### ── Bookings: My bookings ─────────────────────────────────────
+GET {{baseUrl}}/bookings
+Cookie: token={{token}}
+
+
+### ── Bookings: Get by ID ───────────────────────────────────────
+GET {{baseUrl}}/bookings/1
+Cookie: token={{token}}
+
+
+### ── Bookings: Cancel ──────────────────────────────────────────
+POST {{baseUrl}}/bookings/1/cancel
+Cookie: token={{token}}

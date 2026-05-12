@@ -1,0 +1,28 @@
+Found CarRental server on port 3001.
+Logging in as alice.johnson@example.com...
+Login OK.
+
+Firing 10 concurrent POST /bookings requests
+  carId=1  2026-08-01 -> 2026-08-05
+
+------------------------------------------------------------
+#   HTTP  elapsed  result
+------------------------------------------------------------
+ 1  201   222ms    [OK]      CONFIRMED  id=21
+ 2  409   281ms    [REJECT]  OVERLAP_REJECTED
+ 3  201   236ms    [OK]      CONFIRMED  id=23
+ 4  201   236ms    [OK]      CONFIRMED  id=24
+ 5  201   232ms    [OK]      CONFIRMED  id=22
+ 6  409   284ms    [REJECT]  OVERLAP_REJECTED
+ 7  201   240ms    [OK]      CONFIRMED  id=26
+ 8  201   237ms    [OK]      CONFIRMED  id=25
+ 9  201   243ms    [OK]      CONFIRMED  id=28
+10  201   241ms    [OK]      CONFIRMED  id=27
+------------------------------------------------------------
+
+Summary:
+  Confirmed bookings : 8  <- should be exactly 1
+  Overlap-rejected   : 2
+  Other errors       : 0
+
+[BUG] RACE CONDITION CONFIRMED -- 8 overlapping bookings were created!

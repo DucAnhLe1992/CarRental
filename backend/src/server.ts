@@ -34,11 +34,29 @@ function getPortFromArgs(args: string[]): number | undefined {
   return undefined;
 }
 
-const PORT =
+const PREFERRED_PORT =
   getPortFromArgs(process.argv.slice(2)) ??
   parsePort(process.env.PORT) ??
   3000;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
-});
+function startServer(port: number): void {
+  const server = app.listen(port);
+
+  server.once("listening", () => {
+    console.log(`Server is running on http://localhost:${port}`);
+  });
+
+  server.once("error", (err: NodeJS.ErrnoException) => {
+    if (err.code === "EADDRINUSE") {
+      const next = port + 1;
+      console.warn(`Port ${port} is in use, trying ${next}…`);
+      server.close();
+      startServer(next);
+    } else {
+      console.error("Failed to start server:", err.message);
+      process.exit(1);
+    }
+  });
+}
+
+startServer(PREFERRED_PORT);
