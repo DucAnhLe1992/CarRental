@@ -106,10 +106,6 @@ export default function LoginPage() {
   );
 }
 
-
-type FormState = { email: string; password: string };
-const initialState: FormState = { email: "", password: "" };
-
 export default function LoginPage() {
   const { setUser } = useAuth();
   const navigate = useNavigate();

@@ -134,9 +134,6 @@ export default function CarForm({
     </Box>
   );
 }
-
-
-type FieldChangeEvent = ChangeEvent<HTMLInputElement | HTMLTextAreaElement>;
 type CheckboxChangeEvent = ChangeEvent<HTMLInputElement>;
 
 type CarFormProps = {

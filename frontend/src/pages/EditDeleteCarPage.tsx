@@ -137,11 +137,6 @@ export default function EditDeleteCarPage() {
     </Box>
   );
 }
-
-
-export default function EditDeleteCarPage() {
-  const navigate = useNavigate();
-  const params = useParams();
   const id = Number(params.id);
 
   const [form, setForm] = useState<CarFormState | null>(null);

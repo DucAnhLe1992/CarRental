@@ -46,10 +46,6 @@ export default function CreateCarPage() {
     </Box>
   );
 }
-
-
-export default function CreateCarPage() {
-  const [form, setForm] = useState<CarFormState>(initialCarFormState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
