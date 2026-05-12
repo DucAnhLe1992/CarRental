@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { Route, Routes, useNavigate } from "react-router-dom";
 import {
   AppBar,
   Box,
@@ -11,9 +11,7 @@ import {
   createTheme,
 } from "@mui/material";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
-import { AuthProvider } from "./context/AuthContext.tsx";
 import { useAuth } from "./context/useAuth";
-import { useNavigate } from "react-router-dom";
 import NavButtonLink from "./components/NavButtonLink";
 
 import CarsListPage from "./pages/CarsListPage";
@@ -23,6 +21,7 @@ import EditDeleteCarPage from "./pages/EditDeleteCarPage";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import MyBookingsPage from "./pages/MyBookingsPage";
+import BookingDetailPage from "./pages/BookingDetailPage";
 
 const theme = createTheme({
   palette: {
@@ -53,7 +52,7 @@ function AppLayout() {
             CarRental
           </Typography>
 
-          <NavButtonLink to="/cars">Cars</NavButtonLink>
+          <NavButtonLink to="/cars" end>Cars</NavButtonLink>
           {isAdmin ? <NavButtonLink to="/cars/new">Add car</NavButtonLink> : null}
           {isAuthenticated ? (
             <NavButtonLink to="/bookings">
@@ -64,15 +63,25 @@ function AppLayout() {
           <Box sx={{ flexGrow: 1 }} />
 
           {isAuthenticated ? (
-            <Button
-              color="inherit"
-              size="small"
-              variant="outlined"
-              sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff" }}
-              onClick={() => void handleLogout()}
-            >
-              Logout
-            </Button>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+              <Box sx={{ textAlign: "right", lineHeight: 1.2 }}>
+                <Typography variant="body1" sx={{ fontWeight: 700, color: "#fff", fontSize: "1rem" }}>
+                  {auth.user.name}
+                </Typography>
+                <Typography variant="body1" sx={{ display: "block", color: isAdmin ? "#FFD54F" : "rgba(255,255,255,0.6)", fontSize: "0.8rem", textTransform: "capitalize" }}>
+                  {auth.user.role}
+                </Typography>
+              </Box>
+              <Button
+                color="inherit"
+                size="small"
+                variant="outlined"
+                sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff", whiteSpace: "nowrap" }}
+                onClick={() => void handleLogout()}
+              >
+                Logout
+              </Button>
+            </Box>
           ) : (
             <>
               <NavButtonLink to="/auth/login">Login</NavButtonLink>
@@ -91,6 +100,7 @@ function AppLayout() {
           <Route path="/auth/login" element={<LoginPage />} />
           <Route path="/auth/register" element={<RegisterPage />} />
           <Route path="/bookings" element={<MyBookingsPage />} />
+          <Route path="/bookings/:id" element={<BookingDetailPage />} />
           <Route path="*" element={<CarsListPage />} />
         </Routes>
       </Container>
@@ -99,11 +109,5 @@ function AppLayout() {
 }
 
 export default function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppLayout />
-      </AuthProvider>
-    </BrowserRouter>
-  );
+  return <AppLayout />;
 }

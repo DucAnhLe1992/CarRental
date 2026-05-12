@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type SyntheticEvent } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Alert,
@@ -56,7 +56,7 @@ export default function CarDetailPage() {
     void loadCar();
   }, [id]);
 
-  async function handleBook(event: React.FormEvent<HTMLFormElement>): Promise<void> {
+  async function handleBook(event: SyntheticEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     setBookingSubmitting(true);
     setBookingError(null);

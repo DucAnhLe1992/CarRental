@@ -1,5 +1,4 @@
 import { and, count, desc, eq, lte, gte } from "drizzle-orm";
-import { clamp } from "lodash";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
 import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
@@ -97,7 +96,7 @@ export type PaginatedBookings = {
 };
 
 export async function getBookings(query: BookingListQuery): Promise<PaginatedBookings> {
-  const limit = clamp(query.limit, 1, 100);
+  const limit = Math.min(Math.max(query.limit, 1), 100);
   const page = Math.max(1, query.page);
   const offset = (page - 1) * limit;
 
@@ -231,6 +230,7 @@ export async function cancelBooking(
   // Returns null for not-found OR for a customer requesting someone else's booking.
   if (!existing) return null;
 
+  // Consider implementing a try-catch and return a message to handle the error
   if (existing.status === "cancelled") {
     throw new Error("ALREADY_CANCELLED");
   }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -141,8 +142,17 @@ export default function MyBookingsPage() {
                 >
                   {cancellingId === booking.id ? "Cancelling…" : "Cancel booking"}
                 </Button>
+                <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
+                  View details
+                </Button>
               </CardActions>
-            ) : null}
+            ) : (
+              <CardActions sx={{ pt: 0 }}>
+                <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
+                  View details
+                </Button>
+              </CardActions>
+            )}
           </Card>
         ))}
       </Stack>

@@ -16,8 +16,8 @@ import {
   Typography,
 } from "@mui/material";
 import {
-  CheckCircleOutline as CheckCircleOutlineIcon,
-  ErrorOutline as ErrorOutlineIcon,
+  CheckCircleOutlined as CheckCircleOutlinedIcon,
+  ErrorOutlined as ErrorOutlinedIcon,
 } from "@mui/icons-material";
 import { registerUser, loginUser, fetchMe } from "../lib/api";
 import { useAuth } from "../context/useAuth";
@@ -73,7 +73,7 @@ export default function RegisterPage() {
 
   return (
     <Box sx={{ maxWidth: 480, mx: "auto", mt: 4 }}>
-      <Typography variant="h5" fontWeight={700} mb={3} textAlign="center">
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, textAlign: "center" }}>
         Create account
       </Typography>
 
@@ -131,20 +131,23 @@ export default function RegisterPage() {
                       <ListItem key={rule.label} disableGutters sx={{ py: 0 }}>
                         <ListItemIcon sx={{ minWidth: 28 }}>
                           {passed ? (
-                            <CheckCircleOutlineIcon
+                            <CheckCircleOutlinedIcon
                               fontSize="small"
                               color="success"
                             />
                           ) : (
-                            <ErrorOutlineIcon fontSize="small" color="error" />
+                            <ErrorOutlinedIcon fontSize="small" color="error" />
                           )}
                         </ListItemIcon>
                         <ListItemText
-                          primary={rule.label}
-                          primaryTypographyProps={{
-                            variant: "caption",
-                            color: passed ? "success.main" : "error.main",
-                          }}
+                          primary={
+                            <Typography
+                              variant="caption"
+                              color={passed ? "success.main" : "error.main"}
+                            >
+                              {rule.label}
+                            </Typography>
+                          }
                         />
                       </ListItem>
                     );
@@ -172,8 +175,7 @@ export default function RegisterPage() {
 
       <Typography
         variant="body2"
-        textAlign="center"
-        mt={2}
+        sx={{ textAlign: "center", mt: 2 }}
         color="text.secondary"
       >
         Already have an account?{" "}

@@ -48,7 +48,7 @@ export default function LoginPage() {
 
   return (
     <Box sx={{ maxWidth: 440, mx: "auto", mt: 4 }}>
-      <Typography variant="h5" fontWeight={700} mb={3} textAlign="center">
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, textAlign: "center" }}>
         Sign in
       </Typography>
 
@@ -96,80 +96,12 @@ export default function LoginPage() {
         </CardContent>
       </Card>
 
-      <Typography variant="body2" textAlign="center" mt={2} color="text.secondary">
+      <Typography variant="body2" sx={{ textAlign: "center", mt: 2 }} color="text.secondary">
         Don't have an account?{" "}
         <Link to="/auth/register" style={{ color: "inherit", fontWeight: 600 }}>
           Register
         </Link>
       </Typography>
     </Box>
-  );
-}
-
-export default function LoginPage() {
-  const { setUser } = useAuth();
-  const navigate = useNavigate();
-  const [form, setForm] = useState<FormState>(initialState);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(event: SubmitEvent<HTMLFormElement>): Promise<void> {
-    event.preventDefault();
-    setSubmitting(true);
-    setError(null);
-
-    try {
-      await loginUser(form);
-      // Cookie is now set — fetch current user to populate auth state.
-      const user = await fetchMe();
-      setUser(user);
-      void navigate("/cars");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  function handleChange(field: keyof FormState) {
-    return (event: React.ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [field]: event.target.value }));
-    };
-  }
-
-  return (
-    <section className="panel">
-      <h2>Login</h2>
-
-      {error ? <p className="message error">{error}</p> : null}
-
-      <form className="car-form" onSubmit={(event) => void handleSubmit(event)}>
-        <label>
-          Email
-          <input
-            type="email"
-            value={form.email}
-            onChange={handleChange("email")}
-            required
-            autoComplete="email"
-          />
-        </label>
-
-        <label>
-          Password
-          <input
-            type="password"
-            value={form.password}
-            onChange={handleChange("password")}
-            required
-            autoComplete="current-password"
-          />
-        </label>
-
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Logging in…" : "Login"}
-        </button>
-      </form>
-    </section>
   );
 }
