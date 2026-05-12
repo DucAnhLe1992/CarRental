@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { isValid, parseISO } from "date-fns";
 import { cancelBooking, createBooking, getBookingById, getBookings } from "../services/bookingService.js";
+import { AppError } from "../utils/AppError.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -73,18 +74,8 @@ export async function bookCar(
     );
     return res.status(201).json(booking);
   } catch (err) {
-    if (err instanceof Error) {
-      if (err.message === "CAR_NOT_FOUND") {
-        return res.status(404).json({ message: "car not found" });
-      }
-      if (err.message === "CAR_NOT_AVAILABLE") {
-        return res.status(409).json({ message: "car is not available for rental" });
-      }
-      if (err.message === "BOOKING_OVERLAP") {
-        return res
-          .status(409)
-          .json({ message: "car is already booked for the requested dates" });
-      }
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({ message: err.message });
     }
     throw err;
   }
@@ -168,8 +159,8 @@ export async function cancelBookingHandler(
 
     return res.status(200).json(booking);
   } catch (err) {
-    if (err instanceof Error && err.message === "ALREADY_CANCELLED") {
-      return res.status(409).json({ message: "booking is already cancelled" });
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({ message: err.message });
     }
     throw err;
   }

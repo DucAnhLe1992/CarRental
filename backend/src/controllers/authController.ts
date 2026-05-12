@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import type { UserInput } from "../types/user.js";
 import { findUserByEmail, getUserById, loginUser, registerUser } from "../services/authService.js";
+import { AppError } from "../utils/AppError.js";
 
 export async function register(
   req: Request<unknown, unknown, Partial<UserInput>>,
@@ -86,8 +87,8 @@ export async function login(
 
     return res.status(200).json({ message: "Login successful" });
   } catch (err) {
-    if (err instanceof Error && err.message === "INVALID_CREDENTIALS") {
-      return res.status(401).json({ message: "invalid email or password" });
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({ message: err.message });
     }
     throw err;
   }

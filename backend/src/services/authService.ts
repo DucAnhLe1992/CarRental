@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../database/db.js";
 import { usersTable } from "../database/schema.js";
 import type { User, UserInput, UserRole } from "../types/user.js";
+import { AppError } from "../utils/AppError.js";
 
 const SALT_ROUNDS = 12;
 
@@ -56,12 +57,12 @@ export async function loginUser(
   const row = await findUserByEmail(email.trim().toLowerCase());
 
   if (!row) {
-    throw new Error("INVALID_CREDENTIALS");
+    throw new AppError(401, "Invalid email or password");
   }
 
   const match = await bcrypt.compare(password, row.password);
   if (!match) {
-    throw new Error("INVALID_CREDENTIALS");
+    throw new AppError(401, "Invalid email or password");
   }
 
   const secret = process.env.JWT_SECRET;

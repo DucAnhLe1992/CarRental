@@ -4,6 +4,7 @@ import { db } from "../database/db.js";
 import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
 import type { Booking, BookingWithCar } from "../types/booking.js";
 import type { UserRole } from "../types/user.js";
+import { AppError } from "../utils/AppError.js";
 
 function mapRowToBooking(row: SelectBooking): Booking {
   return {
@@ -32,13 +33,13 @@ export async function createBooking(
     .limit(1);
 
   if (carRows.length === 0) {
-    throw new Error("CAR_NOT_FOUND");
+    throw new AppError(404, "Car not found");
   }
 
   const car = carRows[0];
 
   if (!car.available) {
-    throw new Error("CAR_NOT_AVAILABLE");
+    throw new AppError(409, "Car is not available for rental");
   }
 
   // Overlap detection: existing confirmed booking overlaps if
@@ -57,7 +58,7 @@ export async function createBooking(
     .limit(1);
 
   if (overlapping.length > 0) {
-    throw new Error("BOOKING_OVERLAP");
+    throw new AppError(409, "Car is already booked for the requested dates");
   }
 
   // Inclusive day count: endDate - startDate + 1
@@ -232,7 +233,7 @@ export async function cancelBooking(
 
   // Consider implementing a try-catch and return a message to handle the error
   if (existing.status === "cancelled") {
-    throw new Error("ALREADY_CANCELLED");
+    throw new AppError(409, "Booking is already cancelled");
   }
 
   const rows = await db
