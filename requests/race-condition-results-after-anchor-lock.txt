@@ -1,0 +1,28 @@
+Found CarRental server on port 3001.
+Logging in as alice.johnson@example.com...
+Login OK.
+
+Firing 10 concurrent POST /bookings requests
+  carId=1  2026-08-01 -> 2026-08-05
+
+------------------------------------------------------------
+#   HTTP  elapsed  result
+------------------------------------------------------------
+ 1  201   325ms    [OK]      CONFIRMED  id=29
+ 2  409   617ms    [REJECT]  OVERLAP_REJECTED
+ 3  409   701ms    [REJECT]  OVERLAP_REJECTED
+ 4  409   450ms    [REJECT]  OVERLAP_REJECTED
+ 5  409   1035ms   [REJECT]  OVERLAP_REJECTED
+ 6  409   531ms    [REJECT]  OVERLAP_REJECTED
+ 7  409   949ms    [REJECT]  OVERLAP_REJECTED
+ 8  409   1117ms   [REJECT]  OVERLAP_REJECTED
+ 9  409   865ms    [REJECT]  OVERLAP_REJECTED
+10  409   783ms    [REJECT]  OVERLAP_REJECTED
+------------------------------------------------------------
+
+Summary:
+  Confirmed bookings : 1  <- should be exactly 1
+  Overlap-rejected   : 9
+  Other errors       : 0
+
+[OK]  Only 1 booking was created. The race may not have fired this run -- try again.

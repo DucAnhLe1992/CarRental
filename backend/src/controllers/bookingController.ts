@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { isValid, parseISO } from "date-fns";
-import { cancelBooking, createBooking, getBookingById, getBookings } from "../services/bookingService.js";
+import { cancelBooking, createBooking, getBookingById, getBookings, modifyBooking } from "../services/bookingService.js";
 import { AppError } from "../utils/AppError.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -73,6 +73,68 @@ export async function bookCar(
       endDate
     );
     return res.status(201).json(booking);
+  } catch (err) {
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({ message: err.message });
+    }
+    throw err;
+  }
+}
+
+type ModifyBookingBody = {
+  startDate?: unknown;
+  endDate?: unknown;
+};
+
+export async function modifyBookingHandler(
+  req: Request<{ id: string }, unknown, ModifyBookingBody>,
+  res: Response
+): Promise<Response> {
+  const id = Number.parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "booking id must be a valid integer" });
+  }
+
+  const { startDate, endDate } = req.body;
+
+  if (!startDate || typeof startDate !== "string") {
+    return res.status(400).json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
+  if (!endDate || typeof endDate !== "string") {
+    return res.status(400).json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
+
+  const parsedStart = parseDate(startDate);
+  if (!parsedStart) {
+    return res.status(400).json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
+  const parsedEnd = parseDate(endDate);
+  if (!parsedEnd) {
+    return res.status(400).json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  if (startDate < today) {
+    return res.status(400).json({ message: "startDate must not be in the past" });
+  }
+  if (endDate < startDate) {
+    return res.status(400).json({ message: "endDate must be on or after startDate" });
+  }
+
+  try {
+    const booking = await modifyBooking(
+      id,
+      req.userId!,
+      req.userRole ?? "customer",
+      startDate,
+      endDate
+    );
+
+    if (!booking) {
+      return res.status(404).json({ message: "booking not found" });
+    }
+
+    return res.status(200).json(booking);
   } catch (err) {
     if (err instanceof AppError) {
       return res.status(err.statusCode).json({ message: err.message });

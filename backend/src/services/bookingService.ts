@@ -1,4 +1,4 @@
-import { and, count, desc, eq, lte, gte } from "drizzle-orm";
+import { and, count, desc, eq, lte, gte, ne } from "drizzle-orm";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
 import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
@@ -25,60 +25,67 @@ export async function createBooking(
   startDate: string,
   endDate: string
 ): Promise<Booking> {
-  // Fetch the car — throws typed errors that the controller maps to HTTP codes.
-  const carRows = await db
-    .select()
-    .from(carsTable)
-    .where(eq(carsTable.id, carId))
-    .limit(1);
+  return db.transaction(async (tx) => {
+    // Step 1 — Lock the car row as an "anchor".
+    // This forces all concurrent booking attempts for the same car to queue up
+    // one at a time, even when there are no existing bookings to lock yet.
+    const carRows = await tx
+      .select()
+      .from(carsTable)
+      .where(eq(carsTable.id, carId))
+      .for("update")
+      .limit(1);
 
-  if (carRows.length === 0) {
-    throw new AppError(404, "Car not found");
-  }
+    if (carRows.length === 0) {
+      throw new AppError(404, "Car not found");
+    }
 
-  const car = carRows[0];
+    const car = carRows[0];
 
-  if (!car.available) {
-    throw new AppError(409, "Car is not available for rental");
-  }
+    if (!car.available) {
+      throw new AppError(409, "Car is not available for rental");
+    }
 
-  // Overlap detection: existing confirmed booking overlaps if
-  //   existing.startDate <= requested.endDate AND existing.endDate >= requested.startDate
-  const overlapping = await db
-    .select({ id: bookingsTable.id })
-    .from(bookingsTable)
-    .where(
-      and(
-        eq(bookingsTable.carId, carId),
-        eq(bookingsTable.status, "confirmed"),
-        lte(bookingsTable.startDate, endDate),
-        gte(bookingsTable.endDate, startDate)
+    // Step 2 — Overlap detection with a row-level lock.
+    // FOR UPDATE locks any existing confirmed bookings that overlap, preventing
+    // a concurrent transaction from modifying them until this one commits.
+    // The car-row lock above already serializes us, but this makes the intent explicit.
+    const overlapping = await tx
+      .select({ id: bookingsTable.id })
+      .from(bookingsTable)
+      .where(
+        and(
+          eq(bookingsTable.carId, carId),
+          eq(bookingsTable.status, "confirmed"),
+          lte(bookingsTable.startDate, endDate),
+          gte(bookingsTable.endDate, startDate)
+        )
       )
-    )
-    .limit(1);
+      .for("update")
+      .limit(1);
 
-  if (overlapping.length > 0) {
-    throw new AppError(409, "Car is already booked for the requested dates");
-  }
+    if (overlapping.length > 0) {
+      throw new AppError(409, "Car is already booked for the requested dates");
+    }
 
-  // Inclusive day count: endDate - startDate + 1
-  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+    // Step 3 — Safe to insert: we hold the lock and confirmed there is no overlap.
+    const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+    const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
 
-  const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
+    const rows = await tx
+      .insert(bookingsTable)
+      .values({
+        userId,
+        carId,
+        startDate,
+        endDate,
+        totalPrice,
+        status: "confirmed",
+      })
+      .returning();
 
-  const rows = await db
-    .insert(bookingsTable)
-    .values({
-      userId,
-      carId,
-      startDate,
-      endDate,
-      totalPrice,
-      status: "confirmed",
-    })
-    .returning();
-
-  return mapRowToBooking(rows[0]);
+    return mapRowToBooking(rows[0]);
+  });
 }
 
 export type BookingListQuery = {
@@ -246,4 +253,69 @@ export async function cancelBooking(
     ...existing,
     status: rows[0].status,
   };
+}
+
+export async function modifyBooking(
+  bookingId: number,
+  requesterId: number,
+  requesterRole: UserRole,
+  startDate: string,
+  endDate: string
+): Promise<BookingWithCar | null> {
+  return db.transaction(async (tx) => {
+    // Fetch the booking (respects ownership — returns null for wrong user)
+    const existing = await getBookingById(bookingId, requesterId, requesterRole);
+    if (!existing) return null;
+
+    if (existing.status === "cancelled") {
+      throw new AppError(409, "Cannot modify a cancelled booking");
+    }
+
+    // Lock the car row as the anchor — serializes all concurrent modifications
+    // for the same car, including cases where no overlapping bookings exist yet.
+    const carRows = await tx
+      .select()
+      .from(carsTable)
+      .where(eq(carsTable.id, existing.carId))
+      .for("update")
+      .limit(1);
+
+    if (carRows.length === 0) {
+      throw new AppError(404, "Car not found");
+    }
+
+    const car = carRows[0];
+
+    // Overlap check — exclude the booking being modified itself (id != bookingId),
+    // otherwise shifting dates that still overlap the original range would always fail.
+    const overlapping = await tx
+      .select({ id: bookingsTable.id })
+      .from(bookingsTable)
+      .where(
+        and(
+          eq(bookingsTable.carId, existing.carId),
+          eq(bookingsTable.status, "confirmed"),
+          ne(bookingsTable.id, bookingId),
+          lte(bookingsTable.startDate, endDate),
+          gte(bookingsTable.endDate, startDate)
+        )
+      )
+      .for("update")
+      .limit(1);
+
+    if (overlapping.length > 0) {
+      throw new AppError(409, "Car is already booked for the requested dates");
+    }
+
+    // Recompute price based on the new date range and the car's current pricePerDay.
+    const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+    const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
+
+    await tx
+      .update(bookingsTable)
+      .set({ startDate, endDate, totalPrice })
+      .where(eq(bookingsTable.id, bookingId));
+
+    return { ...existing, startDate, endDate, totalPrice };
+  });
 }

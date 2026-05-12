@@ -123,6 +123,16 @@ export function cancelBooking(id: number): Promise<Booking> {
   return request<Booking>(`/bookings/${id}/cancel`, { method: "POST" });
 }
 
+export function updateBooking(
+  id: number,
+  payload: { startDate: string; endDate: string }
+): Promise<Booking> {
+  return request<Booking>(`/bookings/${id}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchBookingById(id: number): Promise<Booking> {
   return request<Booking>(`/bookings/${id}`);
 }

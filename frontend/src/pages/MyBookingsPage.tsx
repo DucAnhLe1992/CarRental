@@ -9,12 +9,14 @@ import {
   CardContent,
   Chip,
   CircularProgress,
+  Collapse,
   Pagination,
   Stack,
+  TextField,
   Typography,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { cancelBooking, fetchBookings } from "../lib/api";
+import { cancelBooking, fetchBookings, updateBooking } from "../lib/api";
 import type { Booking } from "../types/booking";
 import { useAuth } from "../context/useAuth";
 
@@ -33,6 +35,10 @@ export default function MyBookingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [modifyingId, setModifyingId] = useState<number | null>(null);
+  const [modifyOpenId, setModifyOpenId] = useState<number | null>(null);
+  const [modifyDates, setModifyDates] = useState<Record<number, { startDate: string; endDate: string }>>({});
+  const [modifyError, setModifyError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [limit] = useState(10);
   const [total, setTotal] = useState(0);
@@ -58,6 +64,7 @@ export default function MyBookingsPage() {
 
   async function handleCancel(id: number): Promise<void> {
     setCancellingId(id);
+    setError(null);
     try {
       const updated = await cancelBooking(id);
       setBookings((prev) =>
@@ -67,6 +74,31 @@ export default function MyBookingsPage() {
       setError(err instanceof Error ? err.message : "Failed to cancel booking");
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  function openModifyForm(booking: Booking): void {
+    setModifyOpenId((prev) => (prev === booking.id ? null : booking.id));
+    setModifyDates((prev) => ({
+      ...prev,
+      [booking.id]: { startDate: booking.startDate, endDate: booking.endDate },
+    }));
+    setModifyError(null);
+  }
+
+  async function handleModify(id: number): Promise<void> {
+    const dates = modifyDates[id];
+    if (!dates) return;
+    setModifyingId(id);
+    setModifyError(null);
+    try {
+      const updated = await updateBooking(id, dates);
+      setBookings((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+      setModifyOpenId(null);
+    } catch (err) {
+      setModifyError(err instanceof Error ? err.message : "Failed to modify booking");
+    } finally {
+      setModifyingId(null);
     }
   }
 
@@ -133,19 +165,67 @@ export default function MyBookingsPage() {
               </Stack>
             </CardContent>
             {booking.status === "confirmed" ? (
-              <CardActions sx={{ pt: 0 }}>
-                <Button
-                  size="small"
-                  color="error"
-                  disabled={cancellingId === booking.id}
-                  onClick={() => void handleCancel(booking.id)}
-                >
-                  {cancellingId === booking.id ? "Cancelling…" : "Cancel booking"}
-                </Button>
-                <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
-                  View details
-                </Button>
-              </CardActions>
+              <>
+                <CardActions sx={{ pt: 0 }}>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={cancellingId === booking.id}
+                    onClick={() => void handleCancel(booking.id)}
+                  >
+                    {cancellingId === booking.id ? "Cancelling..." : "Cancel booking"}
+                  </Button>
+                  <Button size="small" onClick={() => openModifyForm(booking)}>
+                    {modifyOpenId === booking.id ? "Close" : "Modify dates"}
+                  </Button>
+                  <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
+                    View details
+                  </Button>
+                </CardActions>
+                <Collapse in={modifyOpenId === booking.id}>
+                  <Box sx={{ px: 2, pb: 2 }}>
+                    {modifyError && modifyingId === null ? (
+                      <Alert severity="error" sx={{ mb: 1 }}>{modifyError}</Alert>
+                    ) : null}
+                    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 1 }}>
+                      <TextField
+                        label="Start date"
+                        type="date"
+                        size="small"
+                        value={modifyDates[booking.id]?.startDate ?? booking.startDate}
+                        onChange={(e) =>
+                          setModifyDates((prev) => ({
+                            ...prev,
+                            [booking.id]: { ...prev[booking.id], startDate: e.target.value },
+                          }))
+                        }
+                        slotProps={{ inputLabel: { shrink: true } }}
+                      />
+                      <TextField
+                        label="End date"
+                        type="date"
+                        size="small"
+                        value={modifyDates[booking.id]?.endDate ?? booking.endDate}
+                        onChange={(e) =>
+                          setModifyDates((prev) => ({
+                            ...prev,
+                            [booking.id]: { ...prev[booking.id], endDate: e.target.value },
+                          }))
+                        }
+                        slotProps={{ inputLabel: { shrink: true } }}
+                      />
+                    </Stack>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={modifyingId === booking.id}
+                      onClick={() => void handleModify(booking.id)}
+                    >
+                      {modifyingId === booking.id ? "Saving..." : "Save changes"}
+                    </Button>
+                  </Box>
+                </Collapse>
+              </>
             ) : (
               <CardActions sx={{ pt: 0 }}>
                 <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
