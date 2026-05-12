@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { isValid, parseISO, startOfDay, isAfter, isBefore, differenceInCalendarDays } from "date-fns";
+import { isValid, parseISO } from "date-fns";
 import { cancelBooking, createBooking, getBookingById, getBookings } from "../services/bookingService.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -52,13 +52,13 @@ export async function bookCar(
       .json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
   }
 
-  const today = startOfDay(new Date());
+  const today = new Date().toISOString().slice(0, 10);
 
-  if (isBefore(parsedStart, today)) {
+  if (startDate < today) {
     return res.status(400).json({ message: "startDate must not be in the past" });
   }
 
-  if (isBefore(parsedEnd, parsedStart)) {
+  if (endDate < startDate) {
     return res
       .status(400)
       .json({ message: "endDate must be on or after startDate" });
