@@ -33,8 +33,8 @@ async function resolveBaseUrl(startPort = 3000, maxAttempts = 10) {
 }
 
 const BASE_URL = await resolveBaseUrl(Number(process.env.VITE_API_PORT ?? 3000));
-const LOGIN_EMAIL = process.env.VITE_LOGIN_EMAIL ?? "alice.johnson@example.com";
-const LOGIN_PASSWORD = process.env.VITE_LOGIN_PASSWORD ?? "AliceJ@123";
+const LOGIN_EMAIL = "alice.johnson@example.com";
+const LOGIN_PASSWORD = "AliceJ@123";
 
 // ── Target booking params ────────────────────────────────────────────────────
 const CAR_ID = Number(process.env.VITE_CAR_ID ?? 1);

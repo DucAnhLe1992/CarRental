@@ -263,9 +263,54 @@ export async function modifyBooking(
   endDate: string
 ): Promise<BookingWithCar | null> {
   return db.transaction(async (tx) => {
-    // Fetch the booking (respects ownership — returns null for wrong user)
-    const existing = await getBookingById(bookingId, requesterId, requesterRole);
-    if (!existing) return null;
+    // Fetch the booking inside the transaction so it uses the same connection.
+    // Using getBookingById (which uses `db`) outside the transaction would
+    // consume a separate connection from the pool and cause deadlocks under concurrency.
+    const bookingRows = await tx
+      .select({
+        id: bookingsTable.id,
+        userId: bookingsTable.userId,
+        carId: bookingsTable.carId,
+        startDate: bookingsTable.startDate,
+        endDate: bookingsTable.endDate,
+        totalPrice: bookingsTable.totalPrice,
+        status: bookingsTable.status,
+        createdAt: bookingsTable.createdAt,
+        carMake: carsTable.make,
+        carModel: carsTable.model,
+        carYear: carsTable.year,
+        carPricePerDay: carsTable.pricePerDay,
+      })
+      .from(bookingsTable)
+      .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+      .where(eq(bookingsTable.id, bookingId))
+      .limit(1);
+
+    if (bookingRows.length === 0) return null;
+
+    const bookingRow = bookingRows[0];
+
+    // Customers may only modify their own bookings.
+    if (requesterRole !== "admin" && bookingRow.userId !== requesterId) return null;
+
+    const existing: BookingWithCar = {
+      id: bookingRow.id,
+      userId: bookingRow.userId,
+      carId: bookingRow.carId,
+      startDate: bookingRow.startDate,
+      endDate: bookingRow.endDate,
+      totalPrice: bookingRow.totalPrice,
+      status: bookingRow.status,
+      createdAt: bookingRow.createdAt ? bookingRow.createdAt.toISOString() : null,
+      car: bookingRow.carMake !== null
+        ? {
+            make: bookingRow.carMake,
+            model: bookingRow.carModel!,
+            year: bookingRow.carYear!,
+            pricePerDay: bookingRow.carPricePerDay!,
+          }
+        : null,
+    };
 
     if (existing.status === "cancelled") {
       throw new AppError(409, "Cannot modify a cancelled booking");
