@@ -232,27 +232,81 @@ export async function cancelBooking(
   requesterId: number,
   requesterRole: UserRole
 ): Promise<BookingWithCar | null> {
-  // Fetch the booking first to check ownership and current status.
-  const existing = await getBookingById(id, requesterId, requesterRole);
+  return db.transaction(async (tx) => {
+    // Read the booking inside the transaction so it uses the same connection.
+    const bookingRows = await tx
+      .select({
+        id: bookingsTable.id,
+        userId: bookingsTable.userId,
+        carId: bookingsTable.carId,
+        startDate: bookingsTable.startDate,
+        endDate: bookingsTable.endDate,
+        totalPrice: bookingsTable.totalPrice,
+        status: bookingsTable.status,
+        createdAt: bookingsTable.createdAt,
+        carMake: carsTable.make,
+        carModel: carsTable.model,
+        carYear: carsTable.year,
+        carPricePerDay: carsTable.pricePerDay,
+      })
+      .from(bookingsTable)
+      .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+      .where(eq(bookingsTable.id, id))
+      .limit(1);
 
-  // Returns null for not-found OR for a customer requesting someone else's booking.
-  if (!existing) return null;
+    if (bookingRows.length === 0) return null;
 
-  // Consider implementing a try-catch and return a message to handle the error
-  if (existing.status === "cancelled") {
-    throw new AppError(409, "Booking is already cancelled");
-  }
+    const row = bookingRows[0];
 
-  const rows = await db
-    .update(bookingsTable)
-    .set({ status: "cancelled" })
-    .where(eq(bookingsTable.id, id))
-    .returning();
+    // Customers may only cancel their own bookings.
+    if (requesterRole !== "admin" && row.userId !== requesterId) return null;
 
-  return {
-    ...existing,
-    status: rows[0].status,
-  };
+    const existing: BookingWithCar = {
+      id: row.id,
+      userId: row.userId,
+      carId: row.carId,
+      startDate: row.startDate,
+      endDate: row.endDate,
+      totalPrice: row.totalPrice,
+      status: row.status,
+      createdAt: row.createdAt ? row.createdAt.toISOString() : null,
+      car: row.carMake !== null
+        ? {
+            make: row.carMake,
+            model: row.carModel!,
+            year: row.carYear!,
+            pricePerDay: row.carPricePerDay!,
+          }
+        : null,
+    };
+
+    // Lock the car row as the anchor — prevents a concurrent modify from
+    // updating dates on this booking after we've read it as "confirmed" but
+    // before we flip it to "cancelled".
+    await tx
+      .select({ id: carsTable.id })
+      .from(carsTable)
+      .where(eq(carsTable.id, existing.carId))
+      .for("update")
+      .limit(1);
+
+    // Re-check status under the lock. A concurrent cancel may have already
+    // flipped it between our read above and acquiring the lock.
+    if (existing.status === "cancelled") {
+      throw new AppError(409, "Booking is already cancelled");
+    }
+
+    const rows = await tx
+      .update(bookingsTable)
+      .set({ status: "cancelled" })
+      .where(eq(bookingsTable.id, id))
+      .returning();
+
+    return {
+      ...existing,
+      status: rows[0].status,
+    };
+  });
 }
 
 export async function modifyBooking(
@@ -284,6 +338,7 @@ export async function modifyBooking(
       .from(bookingsTable)
       .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
       .where(eq(bookingsTable.id, bookingId))
+      .for("update")
       .limit(1);
 
     if (bookingRows.length === 0) return null;
@@ -312,12 +367,10 @@ export async function modifyBooking(
         : null,
     };
 
-    if (existing.status === "cancelled") {
-      throw new AppError(409, "Cannot modify a cancelled booking");
-    }
-
     // Lock the car row as the anchor — serializes all concurrent modifications
-    // for the same car, including cases where no overlapping bookings exist yet.
+    // and cancels for the same car. Acquiring this lock before the status check
+    // ensures that a concurrent cancelBooking (which also locks the car row) cannot
+    // flip this booking to "cancelled" between our read and our update.
     const carRows = await tx
       .select()
       .from(carsTable)
@@ -330,6 +383,13 @@ export async function modifyBooking(
     }
 
     const car = carRows[0];
+
+    // Status check happens AFTER acquiring the lock so it reflects committed state.
+    // Any concurrent cancel that ran before us will have already committed by the
+    // time we get here, and we will see status = "cancelled" correctly.
+    if (existing.status === "cancelled") {
+      throw new AppError(409, "Cannot modify a cancelled booking");
+    }
 
     // Overlap check — exclude the booking being modified itself (id != bookingId),
     // otherwise shifting dates that still overlap the original range would always fail.
