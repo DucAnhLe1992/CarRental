@@ -21,6 +21,24 @@ function mapRowToBooking(row: SelectBooking): Booking {
 
 const IDEMPOTENCY_WINDOW_HOURS = 24;
 
+/**
+ * Stripe checkout state-machine decision:
+ *
+ * Chosen option: A
+ * - Create the booking row immediately with `pending_payment` when creating Checkout Session.
+ * - Webhook (`checkout.session.completed`) flips status to `confirmed`.
+ *
+ * Why this is the preferred approach for rentals:
+ * - Inventory is scarce (car + date range), so we must reserve while customer is on Checkout.
+ * - Overlap checks can treat `pending_payment` as a temporary hold and prevent double-selling.
+ * - Option B (insert only on webhook) allows multiple customers to pay for the same slot,
+ *   forcing refunds and manual conflict resolution later.
+ *
+ * Trade-off acknowledged:
+ * - We must expire/clean abandoned `pending_payment` holds (for example via webhook expiry
+ *   and scheduled cleanup), but this is operationally safer than paid-order conflicts.
+ */
+
 type BookingTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 function getBookingRequestHash(carId: number, startDate: string, endDate: string): string {
