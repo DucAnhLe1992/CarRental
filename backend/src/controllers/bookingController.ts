@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { isValid, parseISO } from "date-fns";
-import { cancelBooking, createBooking, getBookingById, getBookings, modifyBooking } from "../services/bookingService.js";
+import { cancelBooking, createBooking, createBookingWithIdempotency, getBookingById, getBookings, modifyBooking } from "../services/bookingService.js";
 import { AppError } from "../utils/AppError.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -22,6 +22,7 @@ export async function bookCar(
   res: Response
 ): Promise<Response> {
   const { carId, startDate, endDate } = req.body;
+  const idempotencyKey = req.header("Idempotency-Key")?.trim();
 
   if (!carId || typeof carId !== "number" || !Number.isInteger(carId) || carId < 1) {
     return res.status(400).json({ message: "carId must be a positive integer" });
@@ -66,6 +67,17 @@ export async function bookCar(
   }
 
   try {
+    if (idempotencyKey) {
+      const result = await createBookingWithIdempotency(
+        req.userId!,
+        idempotencyKey,
+        carId,
+        startDate,
+        endDate
+      );
+      return res.status(result.statusCode).json(result.body);
+    }
+
     const booking = await createBooking(
       req.userId!,
       carId,

@@ -4,11 +4,13 @@ import {
   check,
   date,
   integer,
+  jsonb,
   numeric,
   pgTable,
   serial,
   text,
   timestamp,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/pg-core";
 
@@ -68,3 +70,24 @@ export const bookingsTable = pgTable(
 
 export type InsertBooking = typeof bookingsTable.$inferInsert;
 export type SelectBooking = typeof bookingsTable.$inferSelect;
+
+export const bookingIdempotencyTable = pgTable(
+  "booking_idempotency",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => usersTable.id),
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+    requestHash: varchar("request_hash", { length: 255 }).notNull(),
+    responseStatus: integer("response_status").notNull(),
+    responseBody: jsonb("response_body").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("booking_idempotency_user_key_unique").on(t.userId, t.idempotencyKey),
+  ]
+);
+
+export type InsertBookingIdempotency = typeof bookingIdempotencyTable.$inferInsert;
+export type SelectBookingIdempotency = typeof bookingIdempotencyTable.$inferSelect;

@@ -1,7 +1,7 @@
 import { and, count, desc, eq, lte, gte, ne } from "drizzle-orm";
 import { parseISO, differenceInCalendarDays } from "date-fns";
 import { db } from "../database/db.js";
-import { bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
+import { bookingIdempotencyTable, bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
 import type { Booking, BookingWithCar } from "../types/booking.js";
 import type { UserRole } from "../types/user.js";
 import { AppError } from "../utils/AppError.js";
@@ -19,72 +19,145 @@ function mapRowToBooking(row: SelectBooking): Booking {
   };
 }
 
+const IDEMPOTENCY_WINDOW_HOURS = 24;
+
+type BookingTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+function getBookingRequestHash(carId: number, startDate: string, endDate: string): string {
+  return JSON.stringify({ carId, startDate, endDate });
+}
+
+async function createBookingInTx(
+  tx: BookingTx,
+  userId: number,
+  carId: number,
+  startDate: string,
+  endDate: string
+): Promise<Booking> {
+  // Step 1 — Lock the car row as an "anchor".
+  // This forces all concurrent booking attempts for the same car to queue up
+  // one at a time, even when there are no existing bookings to lock yet.
+  const carRows = await tx
+    .select()
+    .from(carsTable)
+    .where(eq(carsTable.id, carId))
+    .for("update")
+    .limit(1);
+
+  if (carRows.length === 0) {
+    throw new AppError(404, "Car not found");
+  }
+
+  const car = carRows[0];
+
+  if (!car.available) {
+    throw new AppError(409, "Car is not available for rental");
+  }
+
+  // Step 2 — Overlap detection with a row-level lock.
+  // FOR UPDATE locks any existing confirmed bookings that overlap, preventing
+  // a concurrent transaction from modifying them until this one commits.
+  // The car-row lock above already serializes us, but this makes the intent explicit.
+  const overlapping = await tx
+    .select({ id: bookingsTable.id })
+    .from(bookingsTable)
+    .where(
+      and(
+        eq(bookingsTable.carId, carId),
+        eq(bookingsTable.status, "confirmed"),
+        lte(bookingsTable.startDate, endDate),
+        gte(bookingsTable.endDate, startDate)
+      )
+    )
+    .for("update")
+    .limit(1);
+
+  if (overlapping.length > 0) {
+    throw new AppError(409, "Car is already booked for the requested dates");
+  }
+
+  // Step 3 — Safe to insert: we hold the lock and confirmed there is no overlap.
+  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
+  const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
+
+  const rows = await tx
+    .insert(bookingsTable)
+    .values({
+      userId,
+      carId,
+      startDate,
+      endDate,
+      totalPrice,
+      status: "confirmed",
+    })
+    .returning();
+
+  return mapRowToBooking(rows[0]);
+}
+
 export async function createBooking(
   userId: number,
   carId: number,
   startDate: string,
   endDate: string
 ): Promise<Booking> {
+  return db.transaction(async (tx) => createBookingInTx(tx, userId, carId, startDate, endDate));
+}
+
+export async function createBookingWithIdempotency(
+  userId: number,
+  idempotencyKey: string,
+  carId: number,
+  startDate: string,
+  endDate: string
+): Promise<{ statusCode: number; body: Booking }> {
+  const requestHash = getBookingRequestHash(carId, startDate, endDate);
+
   return db.transaction(async (tx) => {
-    // Step 1 — Lock the car row as an "anchor".
-    // This forces all concurrent booking attempts for the same car to queue up
-    // one at a time, even when there are no existing bookings to lock yet.
-    const carRows = await tx
+    const existingRows = await tx
       .select()
-      .from(carsTable)
-      .where(eq(carsTable.id, carId))
-      .for("update")
-      .limit(1);
-
-    if (carRows.length === 0) {
-      throw new AppError(404, "Car not found");
-    }
-
-    const car = carRows[0];
-
-    if (!car.available) {
-      throw new AppError(409, "Car is not available for rental");
-    }
-
-    // Step 2 — Overlap detection with a row-level lock.
-    // FOR UPDATE locks any existing confirmed bookings that overlap, preventing
-    // a concurrent transaction from modifying them until this one commits.
-    // The car-row lock above already serializes us, but this makes the intent explicit.
-    const overlapping = await tx
-      .select({ id: bookingsTable.id })
-      .from(bookingsTable)
+      .from(bookingIdempotencyTable)
       .where(
         and(
-          eq(bookingsTable.carId, carId),
-          eq(bookingsTable.status, "confirmed"),
-          lte(bookingsTable.startDate, endDate),
-          gte(bookingsTable.endDate, startDate)
+          eq(bookingIdempotencyTable.userId, userId),
+          eq(bookingIdempotencyTable.idempotencyKey, idempotencyKey)
         )
       )
       .for("update")
       .limit(1);
 
-    if (overlapping.length > 0) {
-      throw new AppError(409, "Car is already booked for the requested dates");
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
+      const ageMs = Date.now() - existing.createdAt.getTime();
+      const withinWindow = ageMs <= IDEMPOTENCY_WINDOW_HOURS * 60 * 60 * 1000;
+
+      if (withinWindow) {
+        if (existing.requestHash !== requestHash) {
+          throw new AppError(409, "Idempotency-Key was already used with a different request body");
+        }
+
+        return {
+          statusCode: existing.responseStatus,
+          body: existing.responseBody as Booking,
+        };
+      }
+
+      await tx
+        .delete(bookingIdempotencyTable)
+        .where(eq(bookingIdempotencyTable.id, existing.id));
     }
 
-    // Step 3 — Safe to insert: we hold the lock and confirmed there is no overlap.
-    const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-    const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
+    const booking = await createBookingInTx(tx, userId, carId, startDate, endDate);
 
-    const rows = await tx
-      .insert(bookingsTable)
-      .values({
-        userId,
-        carId,
-        startDate,
-        endDate,
-        totalPrice,
-        status: "confirmed",
-      })
-      .returning();
+    await tx.insert(bookingIdempotencyTable).values({
+      userId,
+      idempotencyKey,
+      requestHash,
+      responseStatus: 201,
+      responseBody: booking,
+    });
 
-    return mapRowToBooking(rows[0]);
+    return { statusCode: 201, body: booking };
   });
 }
 
