@@ -47,6 +47,9 @@ const END_A    = process.env.VITE_END_A    ?? "2026-09-05";
 // Different dates for Test 2 (must not overlap START_A/END_A on the same car)
 const START_B  = process.env.VITE_START_B  ?? "2026-09-20";
 const END_B    = process.env.VITE_END_B    ?? "2026-09-25";
+// Isolated dates for first request in Test 2
+const START_C  = process.env.VITE_START_C  ?? "2026-10-10";
+const END_C    = process.env.VITE_END_C    ?? "2026-10-14";
 
 async function login() {
   const res = await fetch(`${BASE_URL}/auth/login`, {
@@ -139,10 +142,10 @@ function fail(label, detail) {
   // ── Test 2: same key, different body ────────────────────────────────────
   console.log("Test 2 — Same Idempotency-Key, different body (conflict detection)");
   console.log(`  key: ${key2}`);
-  console.log(`  First:  car=${CAR_ID}  ${START_A} → ${END_A}`);
+  console.log(`  First:  car=${CAR_ID}  ${START_C} → ${END_C}`);
   console.log(`  Second: car=${CAR_ID}  ${START_B} → ${END_B}\n`);
 
-  const r2a = await postBooking(token, key2, CAR_ID, START_A, END_A);
+  const r2a = await postBooking(token, key2, CAR_ID, START_C, END_C);
   const r2b = await postBooking(token, key2, CAR_ID, START_B, END_B); // different dates
 
   console.log(`  Request 1: HTTP ${r2a.status}`);
