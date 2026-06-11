@@ -23,8 +23,8 @@ import { useAuth } from "../context/useAuth";
 function statusColor(status: string): "success" | "error" | "default" | "warning" {
   if (status === "confirmed") return "success";
   if (status === "cancelled") return "error";
-  if (status === "completed") return "default";
-  return "warning";
+  if (status === "pending_payment") return "warning";
+  return "default";
 }
 
 export default function MyBookingsPage() {

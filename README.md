@@ -213,7 +213,7 @@ On success the response includes `totalPrice` (calculated as number of days × `
 | `start_date` | date | |
 | `end_date` | date | Must be after `start_date` |
 | `total_price` | numeric | Calculated at creation |
-| `status` | varchar | `confirmed`, `cancelled`, or `completed` |
+| `status` | varchar | `pending_payment`, `confirmed`, or `cancelled` |
 | `created_at` | timestamp | Auto |
 
 A booking cannot overlap with another `confirmed` booking for the same car.

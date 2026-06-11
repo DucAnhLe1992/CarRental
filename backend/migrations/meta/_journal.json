@@ -29,6 +29,13 @@
       "when": 1780377600000,
       "tag": "0003_add_booking_idempotency",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1780464000000,
+      "tag": "0004_booking_status_pending_payment",
+      "breakpoints": true
     }
   ]
 }

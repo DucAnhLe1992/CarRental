@@ -1,4 +1,4 @@
-export type BookingStatus = "pending" | "confirmed" | "cancelled";
+export type BookingStatus = "pending_payment" | "confirmed" | "cancelled";
 
 export type BookingCar = {
   make: string;
