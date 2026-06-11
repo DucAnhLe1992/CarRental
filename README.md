@@ -1,235 +1,238 @@
 # Car Rental Full Stack App
 
-A full-stack car rental management app with role-based authentication and booking management.
+Full-stack car rental app with role-based auth, inventory-safe booking concurrency, Stripe Checkout payment flow, and webhook-driven booking confirmation.
 
-- **Backend:** Node.js + Express + TypeScript, PostgreSQL via Neon + Drizzle ORM
-- **Frontend:** React + TypeScript + MUI (Material UI v9), built with Vite
+- Backend: Node.js + Express + TypeScript, PostgreSQL (Neon) via Drizzle ORM
+- Frontend: React + TypeScript + MUI, built with Vite
 
-## Project structure
+## Project Structure
 
 ```
-├── backend/          Express API server
+.
+├── backend/
 │   ├── src/
-│   │   ├── controllers/   Route handlers (carController, authController, bookingController)
-│   │   ├── services/      Business logic (carService, authService, bookingService)
-│   │   ├── routes/        Express routers (carRoutes, authRoutes, bookingRoutes)
-│   │   ├── middleware/    Auth middleware (requireAuth, requireAdmin)
-│   │   ├── database/      Drizzle config, schema (cars, users, bookings tables)
-│   │   └── types/         Shared TypeScript types (car, user, booking)
-│   └── migrations/        Drizzle SQL migration files
-├── frontend/         React client app
+│   │   ├── controllers/
+│   │   ├── database/
+│   │   ├── lib/
+│   │   ├── middleware/
+│   │   ├── routes/
+│   │   ├── services/
+│   │   ├── types/
+│   │   └── utils/
+│   └── migrations/
+├── frontend/
 │   └── src/
-│       ├── pages/         CarsListPage, CarDetailPage, CreateCarPage,
-│       │                  EditDeleteCarPage, LoginPage, RegisterPage, MyBookingsPage
-│       ├── components/    CarForm, NavButtonLink
-│       ├── context/       AuthContext (global session state)
-│       ├── lib/           api.ts (all fetch calls)
-│       └── types/         car.ts, user.ts, booking.ts
-├── scripts/          dev.mjs — starts backend + frontend together
-└── package.json      Root workspace scripts
+│       ├── components/
+│       ├── context/
+│       ├── lib/
+│       ├── pages/
+│       └── types/
+├── requests/        # API requests + race/idempotency test scripts and logs
+├── scripts/         # workspace dev launcher
+└── package.json
 ```
 
-## Quick start
+Detailed design notes (state machine, locking, idempotency, webhook trust boundary): see ARCHITECTURE.md.
 
-From the repository root:
+## Quick Start
+
+From repo root:
 
 ```bash
 npm install
 npm run dev
 ```
 
-This starts:
+Default local URLs:
 
-- Backend on `http://localhost:3000`
-- Frontend on `http://localhost:5173`
+- Backend: http://localhost:3000
+- Frontend: http://localhost:5173
 
-## Run with custom ports
+## Scripts
 
-```bash
-npm run dev -- --backend-port=4000 --frontend-port=5174
-```
-
-Defaults: `backend-port=3000`, `frontend-port=5173`.
-
-Backend only:
-
-```bash
-npm run dev:backend -- --port=4100
-```
-
-## Useful scripts
-
-From root:
+Root scripts:
 
 | Script | Description |
 |---|---|
-| `npm run dev` | Run backend + frontend together |
-| `npm run dev:backend` | Run backend only |
-| `npm run dev:frontend` | Run frontend only |
-| `npm run build` | Build backend + frontend |
+| npm run dev | Start backend + frontend together |
+| npm run dev:backend | Start backend only |
+| npm run dev:frontend | Start frontend only |
+| npm run build | Build backend + frontend |
+| npm run build:backend | Build backend only |
+| npm run build:frontend | Build frontend only |
+| npm run start:backend | Run built backend |
+| npm run preview:frontend | Preview built frontend |
 
-From `backend/`:
+Backend scripts:
 
 | Script | Description |
 |---|---|
-| `npm run db:generate` | Generate a new Drizzle migration |
-| `npm run db:migrate` | Apply pending migrations to the database |
+| npm run dev | tsx watch for API server |
+| npm run db:generate | Generate migrations from schema |
+| npm run db:migrate | Run SQL migrations |
+| npm run db:push | Push schema directly (non-migration workflow) |
 
-## Environment files
+## Environment Variables
 
-Each app has its own `.env`:
+Use template files:
 
-- `backend/.env` — loaded by `dotenv` at startup
-- `frontend/.env` — loaded by Vite via `import.meta.env`
+- backend/.env.template
+- frontend/.env.template
 
-Template files for reference: `backend/.env.template`, `frontend/.env.template`
+Backend .env:
 
-### Required backend variables
+| Variable | Required | Description |
+|---|---|---|
+| PORT | No | API port (default 3000) |
+| DATABASE_URL | Yes | PostgreSQL connection string |
+| JWT_SECRET | Yes | JWT signing secret |
+| FRONTEND_ORIGIN | No | CORS origin (default http://localhost:5173) |
+| STRIPE_SECRET_KEY | Yes | Stripe secret/restricted test key |
+| STRIPE_WEBHOOK_SECRET | Yes (for webhook handling) | Stripe endpoint signing secret (whsec_...) |
 
-| Variable | Description |
-|---|---|
-| `PORT` | Port the Express server listens on (default `3000`) |
-| `DATABASE_URL` | PostgreSQL connection string (Neon) |
-| `JWT_SECRET` | Secret used to sign JWT tokens |
-| `FRONTEND_ORIGIN` | Allowed CORS origin (default `http://localhost:5173`) |
+Frontend .env:
 
-### Required frontend variables
+| Variable | Required | Description |
+|---|---|---|
+| VITE_API_PORT | No | Backend API port (defaults to 3000 in frontend code) |
 
-| Variable | Description |
-|---|---|
-| `VITE_API_PORT` | Port of the backend API (default `3000`) |
+## Authentication Model
 
-## Backend API
+Protected routes accept either:
 
-Base URL: `http://localhost:3000`
+1. Authorization: Bearer <token>
+2. token cookie (httpOnly, set by login)
 
-### Cars
+Role behavior:
+
+- customer: can only access/modify own bookings
+- admin: can manage cars and view all bookings
+
+## Booking + Payment Summary
+
+- Statuses: pending_payment, confirmed, cancelled
+- POST /bookings returns booking plus checkoutUrl
+- Stripe webhook finalizes payment state (not frontend redirect params)
+- Cancel on confirmed booking triggers refund initiation
+
+## API Endpoints
+
+Base URL: http://localhost:3000
+
+Cars:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/cars` | Public | List cars (filterable, paginated) |
-| `GET` | `/cars/:id` | Public | Get a single car |
-| `POST` | `/cars` | Admin | Create a car |
-| `PUT` | `/cars/:id` | Admin | Update a car |
-| `DELETE` | `/cars/:id` | Admin | Delete a car |
+| GET | /cars | Public | List cars (filters + pagination) |
+| GET | /cars/:id | Public | Get one car |
+| POST | /cars | Admin | Create car |
+| PUT | /cars/:id | Admin | Update car |
+| DELETE | /cars/:id | Admin | Delete car |
 
-`GET /cars` query parameters:
-
-- `make` — case-insensitive partial match, e.g. `?make=Toyota`
-- `available` — `true` or `false`
-- `limit` — positive integer, default `10`
-- `page` — positive integer, default `1`
-
-### Auth
+Auth:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/auth/register` | Public | Create a new user account (role = `customer`) |
-| `POST` | `/auth/login` | Public | Log in; sets a `token` cookie |
-| `GET` | `/auth/me` | Required | Return the current user's info including role |
-| `POST` | `/auth/logout` | Public | Clear the `token` cookie |
+| POST | /auth/register | Public | Register customer |
+| POST | /auth/login | Public | Login and set token cookie |
+| GET | /auth/me | Required | Current user profile |
+| POST | /auth/logout | Public | Clear token cookie |
 
-**Register** request body:
-```json
-{ "name": "Alice", "email": "alice@example.com", "password": "Secret1!" }
-```
-Password rules: minimum 8 characters, at least one uppercase letter, at least one special character.
-
-**Login** request body:
-```json
-{ "email": "alice@example.com", "password": "Secret1!" }
-```
-On success a `token` httpOnly cookie is set (7-day expiry). The response body is `{ "message": "Login successful" }`.
-
-### Authentication
-
-Protected routes accept the token in two ways (checked in order):
-
-1. `Authorization: Bearer <token>` header
-2. `token` httpOnly cookie (set automatically by the browser after login)
-
-Returns `401` if the token is missing, invalid, or expired.  
-Returns `403` if the route requires `admin` role but the authenticated user is a `customer`.
-
-### Bookings
+Bookings:
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `POST` | `/bookings` | Customer | Create a booking for a car |
-| `GET` | `/bookings` | Required | List bookings (customers see their own; admins see all) |
-| `GET` | `/bookings/:id` | Required | Get a single booking |
-| `POST` | `/bookings/:id/cancel` | Required | Cancel a booking (soft delete, sets status to `cancelled`) |
+| POST | /bookings | Required | Create pending_payment booking + checkoutUrl |
+| GET | /bookings | Required | Paginated list (customer own, admin all) |
+| GET | /bookings/:id | Required | Get booking by id |
+| PUT | /bookings/:id | Required | Modify booking date range |
+| POST | /bookings/:id/cancel | Required | Cancel booking |
+| POST | /bookings/:id/checkout-url | Required | Reuse or regenerate Checkout URL for pending_payment |
 
-`GET /bookings` query parameters:
+Webhooks:
 
-- `limit` — positive integer, default `10`
-- `page` — positive integer, default `1`
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | /webhooks/stripe | Stripe signature | Handles checkout completion/expiry events |
 
-**Create booking** request body:
+## Request Notes
+
+Create booking request body:
+
 ```json
-{ "carId": 1, "startDate": "2026-06-01", "endDate": "2026-06-05" }
+{
+	"carId": 98,
+	"startDate": "2032-06-01",
+	"endDate": "2032-06-05"
+}
 ```
-Date format: `YYYY-MM-DD`. Start date must not be in the past. End date must be after start date.
 
-On success the response includes `totalPrice` (calculated as number of days × `pricePerDay`).
+Create booking response shape:
 
-## Database schema
+```json
+{
+	"booking": {
+		"id": 47,
+		"userId": 12,
+		"carId": 98,
+		"startDate": "2032-06-01",
+		"endDate": "2032-06-05",
+		"totalPrice": "560.00",
+		"status": "pending_payment",
+		"createdAt": "2032-05-01T10:20:30.000Z"
+	},
+	"checkoutUrl": "https://checkout.stripe.com/c/pay/..."
+}
+```
 
-### `cars`
+Date validation:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | serial | Primary key |
-| `make` | varchar | |
-| `model` | varchar | |
-| `year` | integer | |
-| `color` | varchar | |
-| `number_of_doors` | integer | |
-| `price_per_day` | numeric | |
-| `available` | boolean | |
-| `description` | text | Nullable |
-| `image_url` | text | Nullable |
-| `created_at` | timestamp | Auto |
-| `updated_at` | timestamp | Auto |
+- format: YYYY-MM-DD
+- startDate must not be in the past
+- endDate must be on or after startDate
 
-### `users`
+Cars list query params:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | serial | Primary key |
-| `name` | varchar | |
-| `email` | varchar | Unique |
-| `password` | varchar | Stored as bcrypt hash |
-| `role` | varchar | `admin` or `customer` (default `customer`) |
-| `created_at` | timestamp | Auto |
+- make
+- available
+- limit
+- page
 
-### `bookings`
+Bookings list query params:
 
-| Column | Type | Notes |
-|---|---|---|
-| `id` | serial | Primary key |
-| `car_id` | integer | FK → `cars.id` |
-| `user_id` | integer | FK → `users.id` |
-| `start_date` | date | |
-| `end_date` | date | Must be after `start_date` |
-| `total_price` | numeric | Calculated at creation |
-| `status` | varchar | `pending_payment`, `confirmed`, or `cancelled` |
-| `created_at` | timestamp | Auto |
+- limit
+- page
 
-A booking cannot overlap with another `confirmed` booking for the same car.
+## Architecture and Reliability Notes
 
-Examples:
+This repository includes production-style safeguards for booking and payment handling:
 
-- `GET /cars?make=Toyota&available=true`
-- `GET /cars?limit=10&page=2`
-- `GET /bookings?limit=5&page=1`
+- Row-lock based booking conflict control
+- Multi-layer idempotency (application, Stripe API, webhook event)
+- Signed webhook verification with raw-body parsing
 
-Required payload fields for `POST` and `PUT /cars`:
+See ARCHITECTURE.md for full details.
 
-- `make` (string)
-- `model` (string)
-- `year` (integer)
-- `color` (string)
-- `numberOfDoors` (positive integer)
-- `pricePerDay` (number >= 0)
-- `available` (boolean)
+## Local Stripe Webhook Test
+
+Example local flow:
+
+```bash
+stripe listen --forward-to localhost:3000/webhooks/stripe
+stripe trigger checkout.session.completed
+```
+
+Important:
+
+- backend must run with matching STRIPE_WEBHOOK_SECRET from stripe listen output
+- webhook route is mounted before express.json() and uses express.raw for signature verification
+
+## Test Artifacts
+
+Requests and test logs are in requests/:
+
+- api.http
+- race-condition-test.mjs
+- race-condition-modify-test.mjs
+- idempotency-test.mjs
+- idempotency-test-results.txt
