@@ -60,6 +60,9 @@ export const bookingsTable = pgTable(
     endDate: date("end_date").notNull(),
     totalPrice: numeric("total_price").notNull(),
     status: varchar("status").$type<BookingStatus>().notNull().default("pending_payment"),
+    stripeCheckoutSessionId: varchar("stripe_checkout_session_id"),
+    stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+    holdExpiresAt: timestamp("hold_expires_at"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [
@@ -91,3 +94,12 @@ export const bookingIdempotencyTable = pgTable(
 
 export type InsertBookingIdempotency = typeof bookingIdempotencyTable.$inferInsert;
 export type SelectBookingIdempotency = typeof bookingIdempotencyTable.$inferSelect;
+
+export const stripeEventsTable = pgTable("stripe_events", {
+  id: serial("id").primaryKey(),
+  stripeEventId: varchar("stripe_event_id", { length: 255 }).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type InsertStripeEvent = typeof stripeEventsTable.$inferInsert;
+export type SelectStripeEvent = typeof stripeEventsTable.$inferSelect;

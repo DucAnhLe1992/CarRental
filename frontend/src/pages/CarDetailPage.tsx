@@ -1,5 +1,5 @@
 import { useEffect, useState, type SyntheticEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -23,12 +23,15 @@ export default function CarDetailPage() {
   const { auth } = useAuth();
   const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
   const isCustomer = auth.status === "authenticated" && auth.user.role === "customer";
-  const navigate = useNavigate();
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const id = Number(params.id);
   const [car, setCar] = useState<Car | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Show banner if customer returned from a cancelled Stripe Checkout
+  const paymentCancelled = searchParams.get("payment") === "cancelled";
 
   // Booking form state
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -36,7 +39,6 @@ export default function CarDetailPage() {
   const [endDate, setEndDate] = useState("");
   const [bookingSubmitting, setBookingSubmitting] = useState(false);
   const [bookingError, setBookingError] = useState<string | null>(null);
-  const [bookingSuccess, setBookingSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     if (Number.isNaN(id)) { setError("Invalid car id"); return; }
@@ -60,14 +62,12 @@ export default function CarDetailPage() {
     event.preventDefault();
     setBookingSubmitting(true);
     setBookingError(null);
-    setBookingSuccess(null);
     try {
-      await createBooking({ carId: id, startDate, endDate });
-      setBookingSuccess("Booking confirmed!");
-      setStartDate("");
-      setEndDate("");
-      setShowBookingForm(false);
-      void navigate("/bookings");
+      const { checkoutUrl } = await createBooking({ carId: id, startDate, endDate });
+      // Redirect the browser to Stripe Checkout.
+      // success_url (set server-side) lands on /bookings/:id?payment=success
+      // cancel_url lands back here with ?payment=cancelled
+      window.location.href = checkoutUrl;
     } catch (err) {
       setBookingError(err instanceof Error ? err.message : "Booking failed");
     } finally {
@@ -112,7 +112,11 @@ export default function CarDetailPage() {
             {/* Customer booking form */}
             {isCustomer && car.available ? (
               <Box>
-                {bookingSuccess ? <Alert severity="success" sx={{ mb: 2 }}>{bookingSuccess}</Alert> : null}
+                {paymentCancelled ? (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Payment was cancelled. You can try booking again.
+                  </Alert>
+                ) : null}
                 {!showBookingForm ? (
                   <Button variant="contained" onClick={() => setShowBookingForm(true)}>
                     Book this car
@@ -146,7 +150,7 @@ export default function CarDetailPage() {
                         />
                         <Stack direction="row" spacing={1}>
                           <Button type="submit" variant="contained" disabled={bookingSubmitting}>
-                            {bookingSubmitting ? "Booking…" : "Confirm booking"}
+                            {bookingSubmitting ? "Redirecting to payment…" : "Book & Pay"}
                           </Button>
                           <Button
                             variant="outlined"

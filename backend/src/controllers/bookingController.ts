@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { isValid, parseISO } from "date-fns";
-import { cancelBooking, createBooking, createBookingWithIdempotency, getBookingById, getBookings, modifyBooking } from "../services/bookingService.js";
+import { cancelBooking, createBooking, createBookingWithIdempotency, getBookingById, getBookings, getCheckoutUrl, modifyBooking } from "../services/bookingService.js";
 import { AppError } from "../utils/AppError.js";
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -78,13 +78,13 @@ export async function bookCar(
       return res.status(result.statusCode).json(result.body);
     }
 
-    const booking = await createBooking(
+    const result = await createBooking(
       req.userId!,
       carId,
       startDate,
       endDate
     );
-    return res.status(201).json(booking);
+    return res.status(201).json(result);
   } catch (err) {
     if (err instanceof AppError) {
       return res.status(err.statusCode).json({ message: err.message });
@@ -212,6 +212,24 @@ export async function getBooking(
   }
 
   return res.status(200).json(booking);
+}
+
+export async function getCheckoutUrlHandler(
+  req: Request<{ id: string }>,
+  res: Response
+): Promise<Response> {
+  const id = Number.parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) {
+    return res.status(400).json({ message: "booking id must be a valid integer" });
+  }
+
+  const checkoutUrl = await getCheckoutUrl(id, req.userId!, req.userRole ?? "customer");
+
+  if (!checkoutUrl) {
+    return res.status(404).json({ message: "booking not found or not awaiting payment" });
+  }
+
+  return res.status(200).json({ checkoutUrl });
 }
 
 export async function cancelBookingHandler(

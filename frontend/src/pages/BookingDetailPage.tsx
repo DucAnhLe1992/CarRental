@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Box,
@@ -13,9 +13,16 @@ import {
   Typography,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { cancelBooking, fetchBookingById } from "../lib/api";
+import { cancelBooking, fetchBookingById, getBookingCheckoutUrl } from "../lib/api";
 import type { Booking, BookingStatus } from "../types/booking";
 import { useAuth } from "../context/useAuth";
+
+function statusLabel(status: string): string {
+  if (status === "pending_payment") return "Awaiting payment";
+  if (status === "confirmed") return "Confirmed";
+  if (status === "cancelled") return "Cancelled";
+  return status;
+}
 
 function statusColor(status: string): "success" | "error" | "default" | "warning" {
   if (status === "confirmed") return "success";
@@ -39,12 +46,16 @@ export default function BookingDetailPage() {
   const { auth } = useAuth();
   const navigate = useNavigate();
   const params = useParams();
+  const [searchParams] = useSearchParams();
   const id = Number(params.id);
 
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [completingPayment, setCompletingPayment] = useState(false);
+
+  const paymentSuccess = searchParams.get("payment") === "success";
 
   useEffect(() => {
     if (Number.isNaN(id)) { setError("Invalid booking id"); return; }
@@ -77,6 +88,19 @@ export default function BookingDetailPage() {
     }
   }
 
+  async function handleCompletePayment(): Promise<void> {
+    if (!booking) return;
+    setCompletingPayment(true);
+    try {
+      const { checkoutUrl } = await getBookingCheckoutUrl(booking.id);
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to get checkout URL");
+    } finally {
+      setCompletingPayment(false);
+    }
+  }
+
   const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
 
   return (
@@ -98,6 +122,11 @@ export default function BookingDetailPage() {
       ) : null}
 
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+      {paymentSuccess ? (
+        <Alert severity="success" sx={{ mb: 2 }}>
+          Payment successful! Your booking is confirmed.
+        </Alert>
+      ) : null}
 
       {booking ? (
         <Card variant="outlined">
@@ -109,11 +138,10 @@ export default function BookingDetailPage() {
                   : `Car #${booking.carId}`}
               </Typography>
               <Chip
-                label={booking.status}
+                label={statusLabel(booking.status)}
                 color={statusColor(booking.status)}
                 size="small"
                 variant="outlined"
-                sx={{ textTransform: "capitalize" }}
               />
             </Stack>
 
@@ -143,7 +171,29 @@ export default function BookingDetailPage() {
               ) : null}
             </Stack>
 
-            {booking.status === "confirmed" ? (
+            {booking.status === "pending_payment" ? (
+              <>
+                <Divider sx={{ my: 3 }} />
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="contained"
+                    color="warning"
+                    disabled={completingPayment}
+                    onClick={() => void handleCompletePayment()}
+                  >
+                    {completingPayment ? "Redirecting…" : "Complete payment"}
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    disabled={cancelling}
+                    onClick={() => void handleCancel()}
+                  >
+                    {cancelling ? "Cancelling…" : "Cancel booking"}
+                  </Button>
+                </Stack>
+              </>
+            ) : booking.status === "confirmed" ? (
               <>
                 <Divider sx={{ my: 3 }} />
                 <Button

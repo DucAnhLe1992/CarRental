@@ -1,6 +1,6 @@
 import type { Car, CarInput } from "../types/car";
 import type { User, RegisterInput, LoginInput } from "../types/user";
-import type { Booking, BookingInput, BookingsResponse } from "../types/booking";
+import type { Booking, BookingInput, BookingsResponse, CreateBookingResponse } from "../types/booking";
 
 const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
@@ -112,11 +112,15 @@ export function logoutUser(): Promise<{ message: string }> {
   return request<{ message: string }>("/auth/logout", { method: "POST" });
 }
 
-export function createBooking(payload: BookingInput): Promise<Booking> {
-  return request<Booking>("/bookings", {
+export function createBooking(payload: BookingInput): Promise<CreateBookingResponse> {
+  return request<CreateBookingResponse>("/bookings", {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function getBookingCheckoutUrl(id: number): Promise<{ checkoutUrl: string }> {
+  return request<{ checkoutUrl: string }>(`/bookings/${id}/checkout-url`, { method: "POST" });
 }
 
 export function cancelBooking(id: number): Promise<Booking> {

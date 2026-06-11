@@ -16,9 +16,16 @@ import {
   Typography,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
-import { cancelBooking, fetchBookings, updateBooking } from "../lib/api";
+import { cancelBooking, fetchBookings, getBookingCheckoutUrl, updateBooking } from "../lib/api";
 import type { Booking } from "../types/booking";
 import { useAuth } from "../context/useAuth";
+
+function statusLabel(status: string): string {
+  if (status === "pending_payment") return "Awaiting payment";
+  if (status === "confirmed") return "Confirmed";
+  if (status === "cancelled") return "Cancelled";
+  return status;
+}
 
 function statusColor(status: string): "success" | "error" | "default" | "warning" {
   if (status === "confirmed") return "success";
@@ -35,6 +42,7 @@ export default function MyBookingsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [completingId, setCompletingId] = useState<number | null>(null);
   const [modifyingId, setModifyingId] = useState<number | null>(null);
   const [modifyOpenId, setModifyOpenId] = useState<number | null>(null);
   const [modifyDates, setModifyDates] = useState<Record<number, { startDate: string; endDate: string }>>({});
@@ -74,6 +82,19 @@ export default function MyBookingsPage() {
       setError(err instanceof Error ? err.message : "Failed to cancel booking");
     } finally {
       setCancellingId(null);
+    }
+  }
+
+  async function handleCompletePayment(id: number): Promise<void> {
+    setCompletingId(id);
+    setError(null);
+    try {
+      const { checkoutUrl } = await getBookingCheckoutUrl(id);
+      window.location.href = checkoutUrl;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to get checkout URL");
+    } finally {
+      setCompletingId(null);
     }
   }
 
@@ -156,11 +177,10 @@ export default function MyBookingsPage() {
                   ) : null}
                 </Box>
                 <Chip
-                  label={booking.status}
+                  label={statusLabel(booking.status)}
                   color={statusColor(booking.status)}
                   size="small"
                   variant="outlined"
-                  sx={{ textTransform: "capitalize" }}
                 />
               </Stack>
             </CardContent>
@@ -226,6 +246,29 @@ export default function MyBookingsPage() {
                   </Box>
                 </Collapse>
               </>
+            ) : booking.status === "pending_payment" ? (
+              <CardActions sx={{ pt: 0 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  color="warning"
+                  disabled={completingId === booking.id}
+                  onClick={() => void handleCompletePayment(booking.id)}
+                >
+                  {completingId === booking.id ? "Redirecting..." : "Complete payment"}
+                </Button>
+                <Button
+                  size="small"
+                  color="error"
+                  disabled={cancellingId === booking.id}
+                  onClick={() => void handleCancel(booking.id)}
+                >
+                  {cancellingId === booking.id ? "Cancelling..." : "Cancel"}
+                </Button>
+                <Button size="small" component={Link} to={`/bookings/${booking.id}`}>
+                  View details
+                </Button>
+              </CardActions>
             ) : (
               <CardActions sx={{ pt: 0 }}>
                 <Button size="small" component={Link} to={`/bookings/${booking.id}`}>

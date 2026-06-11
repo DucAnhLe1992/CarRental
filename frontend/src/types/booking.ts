@@ -20,6 +20,11 @@ export type Booking = {
   customerName?: string;
 };
 
+export type CreateBookingResponse = {
+  booking: Booking;
+  checkoutUrl: string;
+};
+
 export type BookingInput = {
   carId: number;
   startDate: string;
@@ -27,6 +32,13 @@ export type BookingInput = {
 };
 
 export type BookingsResponse = {
+  count: number;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  data: Booking[];
+};
   count: number;
   total: number;
   page: number;
