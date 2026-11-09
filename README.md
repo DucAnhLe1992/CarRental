@@ -84,6 +84,7 @@ Backend scripts:
 | npm run db:migrate | Run SQL migrations |
 | npm run db:push | Push schema directly (non-migration workflow) |
 | npm test | Run unit tests (vitest) |
+| npm run test:integration | Run HTTP + database integration tests (embedded Postgres, or `TEST_DATABASE_URL`) |
 | npm run typecheck | Type-check without emitting |
 
 Database workflow:
@@ -113,6 +114,10 @@ Backend .env:
 | DATABASE_DIRECT_URL | No | Direct PostgreSQL connection for Drizzle migrations; falls back to `DATABASE_URL` for local or single-endpoint databases |
 | JWT_SECRET | Yes | JWT signing secret |
 | FRONTEND_ORIGIN | No | CORS origin (default http://localhost:5173) |
+| DATABASE_SSL | No | Set to `false` for local/CI Postgres without TLS (default: TLS on, as Neon requires) |
+| DATABASE_POOL_MAX | No | Maximum pooled connections (pg default 10) |
+| AUTH_RATE_LIMIT_MAX | No | Failed login/register attempts allowed per IP per 15 minutes (default 10) |
+| TRUST_PROXY | No | Number of reverse proxies in front of the API, so rate limiting sees the real client IP (default 0) |
 | STRIPE_SECRET_KEY | Yes | Stripe secret/restricted test key |
 | STRIPE_WEBHOOK_SECRET | Yes (for webhook handling) | Stripe endpoint signing secret (whsec_...) |
 
@@ -134,6 +139,12 @@ Role behavior:
 
 - customer: can only access/modify own bookings
 - admin: can manage cars and view all bookings
+
+Hardening:
+
+- `/auth/login` and `/auth/register` are rate limited per IP; only failed attempts count, so successful sign-ins never lock a user out. Over the limit the API returns 429.
+- `helmet` sets standard security headers (nosniff, frame protection, HSTS, a restrictive CSP for API responses) and removes `X-Powered-By`.
+- The frontend redirects signed-out users to login and customers away from admin pages. This is UX only: the API enforces every role check independently.
 
 ## Booking + Payment Summary
 
@@ -260,8 +271,11 @@ Important:
 ## Tests and CI
 
 - Backend unit tests live in `backend/tests/` and cover date validation, pricing, the booking state machine, idempotency hashing, row mappers and car validation.
+- Backend integration tests live in `backend/tests/integration/`. They drive the real Express app over HTTP with supertest against a migrated Postgres database: auth cookies and role checks, rate limiting and security headers, overlap rejection, five simultaneous requests for the same dates (exactly one wins), Idempotency-Key replay and mismatch, signed Stripe webhooks (including redelivery and forged signatures), refund-once on cancel, same-length rescheduling, and the car-delete guard. Only the outbound Stripe API calls are mocked; webhook payloads are signed with Stripe's own test-header helper.
+  - Locally, with no setup, the suite boots an embedded Postgres (PGlite) and applies every migration. It uses a single connection there, so concurrent requests are serialized.
+  - In CI, `TEST_DATABASE_URL` points at a real Postgres 16 service, so the concurrency test exercises the row locks for real.
 - Frontend unit tests sit next to the code (`frontend/src/lib/*.test.ts`) and cover price estimates, date/money formatting and status labels.
-- `.github/workflows/ci.yml` runs on pushes to every branch and pull requests to `main`: backend tests and build run in parallel, then frontend lint, tests and build run as a matrix. The workflow needs no secrets because the unit tests do not touch the database or Stripe.
+- `.github/workflows/ci.yml` runs on pushes and pull requests to `main`: backend unit tests, integration tests (Postgres service container) and build run in parallel, then frontend lint, tests and build run as a matrix. No secrets are needed.
 
 ## Test Artifacts
 

@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import carRoutes from "./routes/carRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -7,6 +8,11 @@ import bookingRoutes from "./routes/bookingRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
 
 const app = express();
+
+const trustProxy = Number.parseInt(process.env.TRUST_PROXY ?? "0", 10);
+// Behind a load balancer the client IP arrives in X-Forwarded-For; rate limiting needs it.
+app.set("trust proxy", Number.isInteger(trustProxy) ? trustProxy : 0);
+app.use(helmet());
 
 app.use(cors({
   origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",

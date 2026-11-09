@@ -1,5 +1,5 @@
 import { type SubmitEvent, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Alert, Box, Button, CircularProgress, Link as MuiLink, Stack, TextField } from "@mui/material";
 import { loginUser, fetchMe } from "../lib/api";
 import { useAuth } from "../context/useAuth";
@@ -8,9 +8,15 @@ import AuthLayout from "../components/AuthLayout";
 type FormState = { email: string; password: string };
 const initialState: FormState = { email: "", password: "" };
 
+function safeReturnPath(state: unknown): string {
+  const from = (state as { from?: unknown } | null)?.from;
+  return typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/cars";
+}
+
 export default function LoginPage() {
   const { setUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [form, setForm] = useState<FormState>(initialState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +28,7 @@ export default function LoginPage() {
     try {
       await loginUser(form);
       setUser(await fetchMe());
-      void navigate("/cars");
+      void navigate(safeReturnPath(location.state), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {

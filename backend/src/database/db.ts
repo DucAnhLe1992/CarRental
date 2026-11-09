@@ -9,9 +9,13 @@ if (!runtimeDatabaseUrl) {
   throw new Error("DATABASE_URL is required for the application database pool");
 }
 
+const poolMax = Number.parseInt(process.env.DATABASE_POOL_MAX ?? "", 10);
+
 export const pool = new Pool({
   connectionString: runtimeDatabaseUrl,
-  ssl: { rejectUnauthorized: false },
+  // Hosted Postgres (Neon) requires TLS; local and CI databases usually don't offer it.
+  ssl: process.env.DATABASE_SSL === "false" ? false : { rejectUnauthorized: false },
+  ...(Number.isInteger(poolMax) && poolMax > 0 ? { max: poolMax } : {}),
 });
 
 export const db = drizzle({ client: pool });

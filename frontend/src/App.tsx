@@ -22,6 +22,7 @@ import DirectionsCarFilledIcon from "@mui/icons-material/DirectionsCarFilled";
 import MenuIcon from "@mui/icons-material/Menu";
 import { useAuth } from "./context/useAuth";
 import NavButtonLink from "./components/NavButtonLink";
+import RequireAuth from "./components/RequireAuth";
 import { theme } from "./theme";
 
 import CarsListPage from "./pages/CarsListPage";
@@ -153,13 +154,13 @@ function AppLayout() {
           <Routes>
             <Route path="/" element={<Navigate to="/cars" replace />} />
             <Route path="/cars" element={<CarsListPage />} />
-            <Route path="/cars/new" element={<CreateCarPage />} />
+            <Route path="/cars/new" element={<RequireAuth role="admin"><CreateCarPage /></RequireAuth>} />
             <Route path="/cars/:id" element={<CarDetailPage />} />
-            <Route path="/cars/:id/edit" element={<EditDeleteCarPage />} />
+            <Route path="/cars/:id/edit" element={<RequireAuth role="admin"><EditDeleteCarPage /></RequireAuth>} />
             <Route path="/auth/login" element={<LoginPage />} />
             <Route path="/auth/register" element={<RegisterPage />} />
             <Route path="/bookings" element={<MyBookingsPage />} />
-            <Route path="/bookings/:id" element={<BookingDetailPage />} />
+            <Route path="/bookings/:id" element={<RequireAuth><BookingDetailPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/cars" replace />} />
           </Routes>
         </Container>
