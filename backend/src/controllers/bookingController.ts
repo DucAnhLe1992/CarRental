@@ -1,157 +1,87 @@
 import type { Request, Response } from "express";
-import { isValid, parseISO } from "date-fns";
-import { cancelBooking, createBooking, createBookingWithIdempotency, getBookingById, getBookings, getCheckoutUrl, modifyBooking } from "../services/bookingService.js";
+import {
+  cancelBooking,
+  createBooking,
+  createBookingWithIdempotency,
+  getBookingById,
+  getBookings,
+  getCheckoutUrl,
+  modifyBooking,
+} from "../services/bookingService.js";
 import { AppError } from "../utils/AppError.js";
+import { parsePositiveInt, todayIso, validateBookingDates } from "../utils/bookingRules.js";
 
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-
-function parseDate(value: string): Date | null {
-  if (!ISO_DATE_RE.test(value)) return null;
-  const d = parseISO(value);
-  return isValid(d) ? d : null;
-}
-
-type CreateBookingBody = {
-  carId?: unknown;
+type DateRangeBody = {
   startDate?: unknown;
   endDate?: unknown;
 };
+
+type CreateBookingBody = DateRangeBody & { carId?: unknown };
+
+function sendAppError(res: Response, err: unknown): Response {
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({ message: err.message });
+  }
+  throw err;
+}
 
 export async function bookCar(
   req: Request<unknown, unknown, CreateBookingBody>,
   res: Response
 ): Promise<Response> {
-  const { carId, startDate, endDate } = req.body;
+  const { carId, startDate, endDate } = req.body ?? {};
   const idempotencyKey = req.header("Idempotency-Key")?.trim();
 
-  if (!carId || typeof carId !== "number" || !Number.isInteger(carId) || carId < 1) {
+  if (typeof carId !== "number" || !Number.isInteger(carId) || carId < 1) {
     return res.status(400).json({ message: "carId must be a positive integer" });
   }
 
-  if (!startDate || typeof startDate !== "string") {
-    return res
-      .status(400)
-      .json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
+  const dateError = validateBookingDates(startDate, endDate, todayIso());
+  if (dateError) return res.status(400).json({ message: dateError });
+
+  if (idempotencyKey !== undefined && (idempotencyKey.length === 0 || idempotencyKey.length > 255)) {
+    return res.status(400).json({ message: "Idempotency-Key must be between 1 and 255 characters" });
   }
 
-  if (!endDate || typeof endDate !== "string") {
-    return res
-      .status(400)
-      .json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-
-  const parsedStart = parseDate(startDate);
-  if (!parsedStart) {
-    return res
-      .status(400)
-      .json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-
-  const parsedEnd = parseDate(endDate);
-  if (!parsedEnd) {
-    return res
-      .status(400)
-      .json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-
-  if (startDate < today) {
-    return res.status(400).json({ message: "startDate must not be in the past" });
-  }
-
-  if (endDate < startDate) {
-    return res
-      .status(400)
-      .json({ message: "endDate must be on or after startDate" });
-  }
+  const start = startDate as string;
+  const end = endDate as string;
 
   try {
     if (idempotencyKey) {
-      const result = await createBookingWithIdempotency(
-        req.userId!,
-        idempotencyKey,
-        carId,
-        startDate,
-        endDate
-      );
+      const result = await createBookingWithIdempotency(req.userId!, idempotencyKey, carId, start, end);
       return res.status(result.statusCode).json(result.body);
     }
 
-    const result = await createBooking(
-      req.userId!,
-      carId,
-      startDate,
-      endDate
-    );
+    const result = await createBooking(req.userId!, carId, start, end);
     return res.status(201).json(result);
   } catch (err) {
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({ message: err.message });
-    }
-    throw err;
+    return sendAppError(res, err);
   }
 }
 
-type ModifyBookingBody = {
-  startDate?: unknown;
-  endDate?: unknown;
-};
-
 export async function modifyBookingHandler(
-  req: Request<{ id: string }, unknown, ModifyBookingBody>,
+  req: Request<{ id: string }, unknown, DateRangeBody>,
   res: Response
 ): Promise<Response> {
-  const id = Number.parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) {
-    return res.status(400).json({ message: "booking id must be a valid integer" });
-  }
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ message: "booking id must be a positive integer" });
 
-  const { startDate, endDate } = req.body;
-
-  if (!startDate || typeof startDate !== "string") {
-    return res.status(400).json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-  if (!endDate || typeof endDate !== "string") {
-    return res.status(400).json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-
-  const parsedStart = parseDate(startDate);
-  if (!parsedStart) {
-    return res.status(400).json({ message: "startDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-  const parsedEnd = parseDate(endDate);
-  if (!parsedEnd) {
-    return res.status(400).json({ message: "endDate must be a valid ISO date string (YYYY-MM-DD)" });
-  }
-
-  const today = new Date().toISOString().slice(0, 10);
-  if (startDate < today) {
-    return res.status(400).json({ message: "startDate must not be in the past" });
-  }
-  if (endDate < startDate) {
-    return res.status(400).json({ message: "endDate must be on or after startDate" });
-  }
+  const { startDate, endDate } = req.body ?? {};
+  const dateError = validateBookingDates(startDate, endDate, todayIso());
+  if (dateError) return res.status(400).json({ message: dateError });
 
   try {
     const booking = await modifyBooking(
       id,
       req.userId!,
       req.userRole ?? "customer",
-      startDate,
-      endDate
+      startDate as string,
+      endDate as string
     );
-
-    if (!booking) {
-      return res.status(404).json({ message: "booking not found" });
-    }
-
+    if (!booking) return res.status(404).json({ message: "booking not found" });
     return res.status(200).json(booking);
   } catch (err) {
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({ message: err.message });
-    }
-    throw err;
+    return sendAppError(res, err);
   }
 }
 
@@ -164,19 +94,11 @@ export async function listBookings(
   req: Request<unknown, unknown, unknown, BookingListQueryParams>,
   res: Response
 ): Promise<Response> {
-  const limitRaw = typeof req.query.limit === "string" ? req.query.limit : undefined;
-  const pageRaw = typeof req.query.page === "string" ? req.query.page : undefined;
+  const limit = req.query.limit === undefined ? 10 : parsePositiveInt(req.query.limit);
+  const page = req.query.page === undefined ? 1 : parsePositiveInt(req.query.page);
 
-  const limit = limitRaw ? Number.parseInt(limitRaw, 10) : 10;
-  const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
-
-  if (!Number.isInteger(limit) || limit <= 0) {
-    return res.status(400).json({ message: "limit must be a positive integer" });
-  }
-
-  if (!Number.isInteger(page) || page <= 0) {
-    return res.status(400).json({ message: "page must be a positive integer" });
-  }
+  if (!limit) return res.status(400).json({ message: "limit must be a positive integer" });
+  if (!page) return res.status(400).json({ message: "page must be a positive integer" });
 
   const result = await getBookings({
     userId: req.userId!,
@@ -195,65 +117,37 @@ export async function listBookings(
   });
 }
 
-export async function getBooking(
-  req: Request<{ id: string }>,
-  res: Response
-): Promise<Response> {
-  const id = Number.parseInt(req.params.id, 10);
-
-  if (Number.isNaN(id)) {
-    return res.status(400).json({ message: "booking id must be a valid integer" });
-  }
+export async function getBooking(req: Request<{ id: string }>, res: Response): Promise<Response> {
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ message: "booking id must be a positive integer" });
 
   const booking = await getBookingById(id, req.userId!, req.userRole ?? "customer");
-
-  if (!booking) {
-    return res.status(404).json({ message: "booking not found" });
-  }
-
+  if (!booking) return res.status(404).json({ message: "booking not found" });
   return res.status(200).json(booking);
 }
 
-export async function getCheckoutUrlHandler(
-  req: Request<{ id: string }>,
-  res: Response
-): Promise<Response> {
-  const id = Number.parseInt(req.params.id, 10);
-  if (Number.isNaN(id)) {
-    return res.status(400).json({ message: "booking id must be a valid integer" });
+export async function getCheckoutUrlHandler(req: Request<{ id: string }>, res: Response): Promise<Response> {
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ message: "booking id must be a positive integer" });
+
+  try {
+    const checkoutUrl = await getCheckoutUrl(id, req.userId!, req.userRole ?? "customer");
+    if (!checkoutUrl) return res.status(404).json({ message: "booking not found" });
+    return res.status(200).json({ checkoutUrl });
+  } catch (err) {
+    return sendAppError(res, err);
   }
-
-  const checkoutUrl = await getCheckoutUrl(id, req.userId!, req.userRole ?? "customer");
-
-  if (!checkoutUrl) {
-    return res.status(404).json({ message: "booking not found or not awaiting payment" });
-  }
-
-  return res.status(200).json({ checkoutUrl });
 }
 
-export async function cancelBookingHandler(
-  req: Request<{ id: string }>,
-  res: Response
-): Promise<Response> {
-  const id = Number.parseInt(req.params.id, 10);
-
-  if (Number.isNaN(id)) {
-    return res.status(400).json({ message: "booking id must be a valid integer" });
-  }
+export async function cancelBookingHandler(req: Request<{ id: string }>, res: Response): Promise<Response> {
+  const id = parsePositiveInt(req.params.id);
+  if (!id) return res.status(400).json({ message: "booking id must be a positive integer" });
 
   try {
     const booking = await cancelBooking(id, req.userId!, req.userRole ?? "customer");
-
-    if (!booking) {
-      return res.status(404).json({ message: "booking not found" });
-    }
-
+    if (!booking) return res.status(404).json({ message: "booking not found" });
     return res.status(200).json(booking);
   } catch (err) {
-    if (err instanceof AppError) {
-      return res.status(err.statusCode).json({ message: err.message });
-    }
-    throw err;
+    return sendAppError(res, err);
   }
 }

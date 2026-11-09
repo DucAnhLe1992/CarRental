@@ -71,6 +71,10 @@ Backend scripts:
 | npm run db:generate | Generate migrations from schema |
 | npm run db:migrate | Run SQL migrations |
 | npm run db:push | Push schema directly (non-migration workflow) |
+| npm test | Run unit tests (vitest) |
+| npm run typecheck | Type-check without emitting |
+
+Frontend scripts: `npm run lint`, `npm test` (vitest), `npm run build`.
 
 ## Environment Variables
 
@@ -94,6 +98,7 @@ Frontend .env:
 
 | Variable | Required | Description |
 |---|---|---|
+| VITE_API_URL | No | Full API base URL for deployed environments (overrides VITE_API_PORT) |
 | VITE_API_PORT | No | Backend API port (defaults to 3000 in frontend code) |
 
 ## Authentication Model
@@ -110,10 +115,13 @@ Role behavior:
 
 ## Booking + Payment Summary
 
-- Statuses: pending_payment, confirmed, cancelled
-- POST /bookings returns booking plus checkoutUrl
-- Stripe webhook finalizes payment state (not frontend redirect params)
-- Cancel on confirmed booking triggers refund initiation
+- Statuses: pending_payment, confirmed, cancelled (cancelled is terminal)
+- POST /bookings requires an `Idempotency-Key` header and returns booking plus checkoutUrl. Replaying the same key + body returns the stored response; same key with a different body returns 422; a key still in flight returns 409.
+- A pending booking holds its dates until `holdExpiresAt`; expired holds no longer block other customers, and "Complete payment" re-checks overlap before renewing the hold.
+- Stripe webhook finalizes payment state (not frontend redirect params). The booking page polls after `?payment=success` until the webhook has confirmed the booking.
+- Cancelling a confirmed booking issues a refund; progress is tracked in `refund_status` (none, pending, succeeded, failed — migration 0006).
+- A confirmed booking can be rescheduled only to a range with the same number of days, because the amount was already charged. To change the length, cancel for a refund and book again. Pending bookings must be paid before their dates can change.
+- Cars referenced by bookings cannot be deleted (409); mark them unavailable instead.
 
 ## API Endpoints
 
@@ -226,6 +234,12 @@ Important:
 
 - backend must run with matching STRIPE_WEBHOOK_SECRET from stripe listen output
 - webhook route is mounted before express.json() and uses express.raw for signature verification
+
+## Tests and CI (Phase 7)
+
+- Backend unit tests live in `backend/tests/` and cover date validation, pricing, the booking state machine, idempotency hashing, row mappers and car validation.
+- Frontend unit tests sit next to the code (`frontend/src/lib/*.test.ts`) and cover price estimates, date/money formatting and status labels.
+- `.github/workflows/ci.yml` runs on every pull request and push to `main`: backend tests and build run in parallel, then frontend lint, tests and build run as a matrix. The workflow needs no secrets because the unit tests do not touch the database or Stripe.
 
 ## Test Artifacts
 

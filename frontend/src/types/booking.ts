@@ -1,10 +1,13 @@
 export type BookingStatus = "pending_payment" | "confirmed" | "cancelled";
 
+export type RefundStatus = "none" | "pending" | "succeeded" | "failed";
+
 export type BookingCar = {
   make: string;
   model: string;
   year: number;
   pricePerDay: string;
+  imageUrl: string | null;
 };
 
 export type Booking = {
@@ -15,6 +18,8 @@ export type Booking = {
   endDate: string;
   totalPrice: string;
   status: BookingStatus;
+  refundStatus: RefundStatus;
+  holdExpiresAt: string | null;
   createdAt: string | null;
   car: BookingCar | null;
   customerName?: string;
@@ -32,13 +37,6 @@ export type BookingInput = {
 };
 
 export type BookingsResponse = {
-  count: number;
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-  data: Booking[];
-};
   count: number;
   total: number;
   page: number;

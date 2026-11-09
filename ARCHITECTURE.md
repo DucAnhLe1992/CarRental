@@ -103,8 +103,13 @@ Mechanisms:
 | Operation | Lock Sequence | Why |
 |---|---|---|
 | Create booking | cars row (anchor) -> overlapping bookings rows | Serializes same-car booking attempts and prevents double-sell |
-| Modify booking | target booking row -> cars row (anchor) -> overlapping bookings rows | Prevents stale status/date races while checking new overlap |
-| Cancel booking | target booking read -> cars row (anchor) -> update booking | Prevents modify/cancel interleaving inconsistencies |
+| Modify booking | cars row (anchor) -> target booking row -> overlapping bookings rows | Same order as every other path, so modify/cancel/webhook can never deadlock |
+| Cancel booking | cars row (anchor) -> target booking row -> update | Prevents modify/cancel interleaving; Stripe refund runs after commit |
+| Webhook / renew hold | cars row (anchor) -> target booking row | Payment confirmation and hold renewal serialize with cancel and modify |
+
+All paths take the car lock first and the booking lock second. Stripe calls never run inside a database transaction.
+
+Refund progress is stored in `bookings.refund_status` (none -> pending -> succeeded/failed) together with `stripe_refund_id` (migration 0006). Rescheduling a confirmed booking keeps the paid number of days, so the stored total always matches what Stripe charged.
 
 ## Create Booking Sequence
 

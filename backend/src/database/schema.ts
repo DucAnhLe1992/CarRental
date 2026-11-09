@@ -3,6 +3,7 @@ import {
   boolean,
   check,
   date,
+  index,
   integer,
   jsonb,
   numeric,
@@ -45,6 +46,7 @@ export type InsertUser = typeof usersTable.$inferInsert;
 export type SelectUser = typeof usersTable.$inferSelect;
 
 export type BookingStatus = "pending_payment" | "confirmed" | "cancelled";
+export type RefundStatus = "none" | "pending" | "succeeded" | "failed";
 
 export const bookingsTable = pgTable(
   "bookings",
@@ -62,12 +64,17 @@ export const bookingsTable = pgTable(
     status: varchar("status").$type<BookingStatus>().notNull().default("pending_payment"),
     stripeCheckoutSessionId: varchar("stripe_checkout_session_id"),
     stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+    stripeRefundId: varchar("stripe_refund_id"),
+    refundStatus: varchar("refund_status").$type<RefundStatus>().notNull().default("none"),
     holdExpiresAt: timestamp("hold_expires_at"),
     createdAt: timestamp("created_at").defaultNow(),
   },
   (t) => [
     check("bookings_status_check", sql`${t.status} IN ('pending_payment', 'confirmed', 'cancelled')`),
     check("bookings_dates_check", sql`${t.endDate} >= ${t.startDate}`),
+    check("bookings_refund_status_check", sql`${t.refundStatus} IN ('none', 'pending', 'succeeded', 'failed')`),
+    index("bookings_car_id_dates_idx").on(t.carId, t.startDate, t.endDate),
+    index("bookings_payment_intent_idx").on(t.stripePaymentIntentId),
   ]
 );
 
@@ -83,8 +90,8 @@ export const bookingIdempotencyTable = pgTable(
       .references(() => usersTable.id),
     idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
     requestHash: varchar("request_hash", { length: 255 }).notNull(),
-    responseStatus: integer("response_status").notNull(),
-    responseBody: jsonb("response_body").notNull(),
+    responseStatus: integer("response_status"),
+    responseBody: jsonb("response_body"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [

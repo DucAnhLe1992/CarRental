@@ -43,6 +43,13 @@
       "when": 1780550400000,
       "tag": "0005_add_stripe_fields",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1780636800000,
+      "tag": "0006_refund_tracking_and_idempotency_reservation",
+      "breakpoints": true
     }
   ]
 }

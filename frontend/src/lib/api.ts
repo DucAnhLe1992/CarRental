@@ -2,7 +2,8 @@ import type { Car, CarInput } from "../types/car";
 import type { User, RegisterInput, LoginInput } from "../types/user";
 import type { Booking, BookingInput, BookingsResponse, CreateBookingResponse } from "../types/booking";
 
-const API_BASE = `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
+const API_BASE: string =
+  import.meta.env.VITE_API_URL ?? `http://localhost:${import.meta.env.VITE_API_PORT ?? 3000}`;
 
 export type FetchCarsParams = {
   make?: string;
@@ -22,9 +23,9 @@ export type FetchCarsResponse = {
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
     ...init,
+    credentials: "include",
+    headers: { "Content-Type": "application/json", ...init?.headers },
   });
 
   if (!response.ok) {
@@ -112,9 +113,10 @@ export function logoutUser(): Promise<{ message: string }> {
   return request<{ message: string }>("/auth/logout", { method: "POST" });
 }
 
-export function createBooking(payload: BookingInput): Promise<CreateBookingResponse> {
+export function createBooking(payload: BookingInput, idempotencyKey: string): Promise<CreateBookingResponse> {
   return request<CreateBookingResponse>("/bookings", {
     method: "POST",
+    headers: { "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(payload),
   });
 }

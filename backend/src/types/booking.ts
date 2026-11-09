@@ -1,4 +1,4 @@
-import type { BookingStatus } from "../database/schema.js";
+import type { BookingStatus, RefundStatus } from "../database/schema.js";
 
 export type Booking = {
   id: number;
@@ -8,6 +8,8 @@ export type Booking = {
   endDate: string;
   totalPrice: string;
   status: BookingStatus;
+  refundStatus: RefundStatus;
+  holdExpiresAt: string | null;
   createdAt: string | null;
 };
 
@@ -17,6 +19,7 @@ export type BookingWithCar = Booking & {
     model: string;
     year: number;
     pricePerDay: string;
+    imageUrl: string | null;
   } | null;
   customerName?: string;
 };
@@ -27,4 +30,4 @@ export type BookingInput = {
   endDate: string;
 };
 
-export { type BookingStatus };
+export { type BookingStatus, type RefundStatus };

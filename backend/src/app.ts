@@ -1,4 +1,4 @@
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import carRoutes from "./routes/carRoutes.js";
@@ -28,5 +28,18 @@ app.get("/", (_req, res) => {
 app.use("/cars", carRoutes);
 app.use("/auth", authRoutes);
 app.use("/bookings", bookingRoutes);
+
+app.use((_req: Request, res: Response) => {
+  res.status(404).json({ message: "Route not found" });
+});
+
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  if (err instanceof SyntaxError && "body" in err) {
+    res.status(400).json({ message: "Request body must be valid JSON" });
+    return;
+  }
+  console.error("[Unhandled]", err);
+  res.status(500).json({ message: "Something went wrong on our side. Please try again." });
+});
 
 export default app;

@@ -65,5 +65,9 @@ export function validateCarPayload(payload: Partial<CarInput>): string | null {
     return "imageUrl must be a string when provided";
   }
 
+  if (typeof payload.imageUrl === "string" && payload.imageUrl.trim() !== "" && !/^https?:\/\//i.test(payload.imageUrl.trim())) {
+    return "imageUrl must start with http:// or https://";
+  }
+
   return null;
 }

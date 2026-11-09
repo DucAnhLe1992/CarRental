@@ -1,37 +1,19 @@
 import { type SubmitEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CircularProgress,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
-import {
-  CheckCircleOutlined as CheckCircleOutlinedIcon,
-  ErrorOutlined as ErrorOutlinedIcon,
-} from "@mui/icons-material";
+import { Alert, Box, Button, CircularProgress, Link as MuiLink, Stack, TextField, Typography } from "@mui/material";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
+import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
 import { registerUser, loginUser, fetchMe } from "../lib/api";
 import { useAuth } from "../context/useAuth";
+import AuthLayout from "../components/AuthLayout";
 
 type FormState = { name: string; email: string; password: string };
 const initialState: FormState = { name: "", email: "", password: "" };
 
 const PASSWORD_RULES: Array<{ label: string; test: (p: string) => boolean }> = [
   { label: "At least 8 characters", test: (p) => p.length >= 8 },
-  { label: "At least one uppercase letter", test: (p) => /[A-Z]/.test(p) },
-  {
-    label: "At least one special character",
-    test: (p) => /[^A-Za-z0-9]/.test(p),
-  },
+  { label: "One uppercase letter", test: (p) => /[A-Z]/.test(p) },
+  { label: "One special character", test: (p) => /[^A-Za-z0-9]/.test(p) },
 ];
 
 export default function RegisterPage() {
@@ -42,12 +24,9 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
 
   const passwordTouched = form.password.length > 0;
-  const failingRules = PASSWORD_RULES.filter((r) => !r.test(form.password));
-  const passwordValid = failingRules.length === 0;
+  const passwordValid = PASSWORD_RULES.every((r) => r.test(form.password));
 
-  async function handleSubmit(
-    event: SubmitEvent<HTMLFormElement>,
-  ): Promise<void> {
+  async function handleSubmit(event: SubmitEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
     if (!passwordValid) return;
     setSubmitting(true);
@@ -55,8 +34,7 @@ export default function RegisterPage() {
     try {
       await registerUser(form);
       await loginUser({ email: form.email, password: form.password });
-      const user = await fetchMe();
-      setUser(user);
+      setUser(await fetchMe());
       void navigate("/cars");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -72,117 +50,49 @@ export default function RegisterPage() {
   }
 
   return (
-    <Box sx={{ maxWidth: 480, mx: "auto", mt: 4 }}>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3, textAlign: "center" }}>
-        Create account
-      </Typography>
-
-      <Card variant="outlined">
-        <CardContent>
-          {error ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          ) : null}
-
-          <Box
-            component="form"
-            onSubmit={(event) => void handleSubmit(event)}
-            noValidate
+    <AuthLayout
+      title="Create your account"
+      subtitle="It takes less than a minute."
+      footer={<>Already have an account? <MuiLink component={Link} to="/auth/login" sx={{ fontWeight: 600 }}>Log in</MuiLink></>}
+    >
+      <Box component="form" onSubmit={(event) => void handleSubmit(event)} noValidate>
+        <Stack spacing={2}>
+          {error ? <Alert severity="error">{error}</Alert> : null}
+          <TextField label="Full name" required fullWidth autoComplete="name" value={form.name} onChange={handleChange("name")} />
+          <TextField label="Email" type="email" required fullWidth autoComplete="email" value={form.email} onChange={handleChange("email")} />
+          <TextField
+            label="Password"
+            type="password"
+            required
+            fullWidth
+            autoComplete="new-password"
+            value={form.password}
+            onChange={handleChange("password")}
+            error={passwordTouched && !passwordValid}
+          />
+          <Stack spacing={0.5}>
+            {PASSWORD_RULES.map((rule) => {
+              const passed = rule.test(form.password);
+              return (
+                <Stack key={rule.label} direction="row" spacing={1} sx={{ alignItems: "center", color: passed ? "success.main" : "text.secondary", transition: "color 160ms ease" }}>
+                  {passed ? <CheckCircleRoundedIcon sx={{ fontSize: 18 }} /> : <RadioButtonUncheckedIcon sx={{ fontSize: 18 }} />}
+                  <Typography variant="body2">{rule.label}</Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+          <Button
+            type="submit"
+            variant="contained"
+            size="large"
+            fullWidth
+            disabled={submitting || !passwordValid}
+            startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : null}
           >
-            <Stack spacing={2}>
-              <TextField
-                label="Name"
-                type="text"
-                required
-                fullWidth
-                size="small"
-                autoComplete="name"
-                value={form.name}
-                onChange={handleChange("name")}
-              />
-              <TextField
-                label="Email"
-                type="email"
-                required
-                fullWidth
-                size="small"
-                autoComplete="email"
-                value={form.email}
-                onChange={handleChange("email")}
-              />
-              <TextField
-                label="Password"
-                type="password"
-                required
-                fullWidth
-                size="small"
-                autoComplete="new-password"
-                value={form.password}
-                onChange={handleChange("password")}
-                error={passwordTouched && !passwordValid}
-              />
-
-              {passwordTouched ? (
-                <List dense disablePadding>
-                  {PASSWORD_RULES.map((rule) => {
-                    const passed = rule.test(form.password);
-                    return (
-                      <ListItem key={rule.label} disableGutters sx={{ py: 0 }}>
-                        <ListItemIcon sx={{ minWidth: 28 }}>
-                          {passed ? (
-                            <CheckCircleOutlinedIcon
-                              fontSize="small"
-                              color="success"
-                            />
-                          ) : (
-                            <ErrorOutlinedIcon fontSize="small" color="error" />
-                          )}
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={
-                            <Typography
-                              variant="caption"
-                              color={passed ? "success.main" : "error.main"}
-                            >
-                              {rule.label}
-                            </Typography>
-                          }
-                        />
-                      </ListItem>
-                    );
-                  })}
-                </List>
-              ) : null}
-
-              <Button
-                type="submit"
-                variant="contained"
-                fullWidth
-                disabled={submitting || (passwordTouched && !passwordValid)}
-                startIcon={
-                  submitting ? (
-                    <CircularProgress size={16} color="inherit" />
-                  ) : null
-                }
-              >
-                {submitting ? "Registering..." : "Register"}
-              </Button>
-            </Stack>
-          </Box>
-        </CardContent>
-      </Card>
-
-      <Typography
-        variant="body2"
-        sx={{ textAlign: "center", mt: 2 }}
-        color="text.secondary"
-      >
-        Already have an account?{" "}
-        <Link to="/auth/login" style={{ color: "inherit", fontWeight: 600 }}>
-          Login
-        </Link>
-      </Typography>
-    </Box>
+            {submitting ? "Creating account…" : "Create account"}
+          </Button>
+        </Stack>
+      </Box>
+    </AuthLayout>
   );
 }

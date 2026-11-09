@@ -1,53 +1,44 @@
 import type { SubmitEvent } from "react";
-import { useEffect, useState } from "react";
-import { Alert, Box, Card, CardContent, Typography } from "@mui/material";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { Alert, Box, Card } from "@mui/material";
 import { createCar } from "../lib/api";
 import CarForm from "../components/CarForm";
+import PageHeader from "../components/PageHeader";
 import { initialCarFormState, toCarInput, type CarFormState } from "../types/car";
 
 export default function CreateCarPage() {
+  const navigate = useNavigate();
   const [form, setForm] = useState<CarFormState>(initialCarFormState);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(t);
-  }, [notice]);
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSubmitting(true);
     setError(null);
-    setNotice(null);
     try {
-      await createCar(toCarInput(form));
-      setForm(initialCarFormState);
-      setNotice("Car created successfully.");
+      const car = await createCar(toCarInput(form));
+      void navigate(`/cars/${car.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create car");
-    } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Create Car</Typography>
+    <Box sx={{ maxWidth: 760, mx: "auto" }}>
+      <PageHeader eyebrow="Fleet" title="Add a car" subtitle="New cars appear in the catalog as soon as you save." />
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-      {notice ? <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert> : null}
-      <Card variant="outlined">
-        <CardContent>
-          <CarForm
-            form={form}
-            submitting={submitting}
-            submitLabel="Create"
-            onSubmit={handleSubmit}
-            onChange={setForm}
-          />
-        </CardContent>
+      <Card sx={{ p: { xs: 2, sm: 4 } }}>
+        <CarForm
+          form={form}
+          submitting={submitting}
+          submitLabel="Add car"
+          onCancel={() => void navigate("/cars")}
+          onSubmit={handleSubmit}
+          onChange={setForm}
+        />
       </Card>
     </Box>
   );

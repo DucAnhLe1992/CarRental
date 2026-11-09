@@ -1,6 +1,7 @@
 import { and, count, desc, eq, ilike, type SQL } from "drizzle-orm";
 import { db } from "../database/db.js";
-import { carsTable, SelectCar } from "../database/schema.js";
+import { carsTable } from "../database/schema.js";
+import { mapRowToCar, normalizeOptionalText } from "../utils/carMappers.js";
 import type { Car, CarInput } from "../types/car.js";
 
 type CarListQuery = {
@@ -17,32 +18,6 @@ type PaginatedCars = {
   limit: number;
   totalPages: number;
 };
-
-function mapRowToCar(row: SelectCar): Car {
-  return {
-    id: row.id,
-    make: row.make,
-    model: row.model,
-    year: row.year,
-    color: row.color,
-    numberOfDoors: row.numberOfDoors,
-    pricePerDay: Number(row.pricePerDay),
-    available: row.available,
-    description: row.description,
-    imageUrl: row.imageUrl,
-    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-    updatedAt: row.updatedAt ? row.updatedAt.toISOString() : null,
-  };
-}
-
-function normalizeOptionalText(value: string | null | undefined): string | null {
-  if (value === undefined || value === null) {
-    return null;
-  }
-
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed;
-}
 
 export async function getAllCars(query: CarListQuery): Promise<PaginatedCars> {
   const conditions: SQL[] = [];

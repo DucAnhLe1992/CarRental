@@ -1,18 +1,28 @@
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import {
   AppBar,
+  Avatar,
   Box,
   Button,
   Container,
   CssBaseline,
+  Divider,
+  Drawer,
+  IconButton,
+  List,
+  ListItemButton,
+  ListItemText,
+  Stack,
   ThemeProvider,
   Toolbar,
   Typography,
-  createTheme,
 } from "@mui/material";
-import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
+import DirectionsCarFilledIcon from "@mui/icons-material/DirectionsCarFilled";
+import MenuIcon from "@mui/icons-material/Menu";
 import { useAuth } from "./context/useAuth";
 import NavButtonLink from "./components/NavButtonLink";
+import { theme } from "./theme";
 
 import CarsListPage from "./pages/CarsListPage";
 import CarDetailPage from "./pages/CarDetailPage";
@@ -23,87 +33,146 @@ import RegisterPage from "./pages/RegisterPage";
 import MyBookingsPage from "./pages/MyBookingsPage";
 import BookingDetailPage from "./pages/BookingDetailPage";
 
-const theme = createTheme({
-  palette: {
-    primary: { main: "#1565C0" },
-    secondary: { main: "#FF8F00" },
-  },
-  shape: { borderRadius: 10 },
-});
+type NavItem = { to: string; label: string; end?: boolean };
+
+function Brand() {
+  return (
+    <Stack component={Link} to="/cars" direction="row" spacing={1} sx={{ alignItems: "center", textDecoration: "none", color: "text.primary" }}>
+      <Box sx={{ width: 36, height: 36, borderRadius: 2.5, bgcolor: "primary.main", color: "#fff", display: "grid", placeItems: "center" }}>
+        <DirectionsCarFilledIcon fontSize="small" />
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 700 }}>
+        Drive<Box component="span" sx={{ color: "primary.main" }}>Now</Box>
+      </Typography>
+    </Stack>
+  );
+}
 
 function AppLayout() {
   const { auth, logout } = useAuth();
   const navigate = useNavigate();
-  const isAuthenticated = auth.status === "authenticated";
-  const isAdmin = auth.status === "authenticated" && auth.user.role === "admin";
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const user = auth.status === "authenticated" ? auth.user : null;
+  const isAdmin = user?.role === "admin";
+
+  const navItems: NavItem[] = [
+    { to: "/cars", label: "Browse cars", end: true },
+    ...(isAdmin ? [{ to: "/cars/new", label: "Add car" }] : []),
+    ...(user ? [{ to: "/bookings", label: isAdmin ? "All bookings" : "My bookings" }] : []),
+  ];
 
   async function handleLogout(): Promise<void> {
+    setDrawerOpen(false);
     await logout();
     void navigate("/auth/login");
+  }
+
+  function go(to: string): void {
+    setDrawerOpen(false);
+    void navigate(to);
   }
 
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <AppBar position="sticky">
-        <Toolbar sx={{ gap: 1 }}>
-          <DirectionsCarIcon sx={{ mr: 1 }} />
-          <Typography variant="h6" sx={{ fontWeight: 700, flexGrow: 0, mr: 2 }}>
-            CarRental
-          </Typography>
+      <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        <AppBar
+          position="sticky"
+          elevation={0}
+          sx={{ bgcolor: "rgba(255,255,255,0.88)", backdropFilter: "blur(12px)", color: "text.primary", borderBottom: "1px solid", borderColor: "divider" }}
+        >
+          <Container maxWidth="lg">
+            <Toolbar disableGutters sx={{ gap: 2, minHeight: { xs: 64 } }}>
+              <Brand />
+              <Stack direction="row" spacing={0.5} sx={{ display: { xs: "none", md: "flex" }, ml: 3 }}>
+                {navItems.map((item) => (
+                  <NavButtonLink key={item.to} to={item.to} end={item.end}>{item.label}</NavButtonLink>
+                ))}
+              </Stack>
+              <Box sx={{ flexGrow: 1 }} />
 
-          <NavButtonLink to="/cars" end>Cars</NavButtonLink>
-          {isAdmin ? <NavButtonLink to="/cars/new">Add car</NavButtonLink> : null}
-          {isAuthenticated ? (
-            <NavButtonLink to="/bookings">
-              {isAdmin ? "All Bookings" : "My Bookings"}
-            </NavButtonLink>
-          ) : null}
-
-          <Box sx={{ flexGrow: 1 }} />
-
-          {isAuthenticated ? (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
-              <Box sx={{ textAlign: "right", lineHeight: 1.2 }}>
-                <Typography variant="body1" sx={{ fontWeight: 700, color: "#fff", fontSize: "1rem" }}>
-                  {auth.user.name}
-                </Typography>
-                <Typography variant="body1" sx={{ display: "block", color: isAdmin ? "#FFD54F" : "rgba(255,255,255,0.6)", fontSize: "0.8rem", textTransform: "capitalize" }}>
-                  {auth.user.role}
-                </Typography>
+              <Box sx={{ display: { xs: "none", md: "flex" }, alignItems: "center", gap: 1.5 }}>
+                {user ? (
+                  <>
+                    <Avatar sx={{ width: 34, height: 34, bgcolor: "secondary.main", color: "secondary.contrastText", fontSize: 15, fontWeight: 700 }}>
+                      {user.name.charAt(0).toUpperCase()}
+                    </Avatar>
+                    <Box sx={{ lineHeight: 1.2 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>{user.name}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ textTransform: "capitalize" }}>{user.role}</Typography>
+                    </Box>
+                    <Button variant="outlined" size="small" color="inherit" sx={{ borderColor: "divider" }} onClick={() => void handleLogout()}>
+                      Log out
+                    </Button>
+                  </>
+                ) : auth.status === "unauthenticated" ? (
+                  <>
+                    <Button component={Link} to="/auth/login" color="inherit">Log in</Button>
+                    <Button component={Link} to="/auth/register" variant="contained">Sign up</Button>
+                  </>
+                ) : null}
               </Box>
-              <Button
-                color="inherit"
-                size="small"
-                variant="outlined"
-                sx={{ borderColor: "rgba(255,255,255,0.5)", color: "#fff", whiteSpace: "nowrap" }}
-                onClick={() => void handleLogout()}
-              >
-                Logout
-              </Button>
-            </Box>
-          ) : (
-            <>
-              <NavButtonLink to="/auth/login">Login</NavButtonLink>
-              <NavButtonLink to="/auth/register">Register</NavButtonLink>
-            </>
-          )}
-        </Toolbar>
-      </AppBar>
 
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Routes>
-          <Route path="/cars" element={<CarsListPage />} />
-          <Route path="/cars/new" element={<CreateCarPage />} />
-          <Route path="/cars/:id" element={<CarDetailPage />} />
-          <Route path="/cars/:id/edit" element={<EditDeleteCarPage />} />
-          <Route path="/auth/login" element={<LoginPage />} />
-          <Route path="/auth/register" element={<RegisterPage />} />
-          <Route path="/bookings" element={<MyBookingsPage />} />
-          <Route path="/bookings/:id" element={<BookingDetailPage />} />
-          <Route path="*" element={<CarsListPage />} />
-        </Routes>
-      </Container>
+              <IconButton sx={{ display: { md: "none" } }} aria-label="Open menu" onClick={() => setDrawerOpen(true)}>
+                <MenuIcon />
+              </IconButton>
+            </Toolbar>
+          </Container>
+        </AppBar>
+
+        <Drawer anchor="right" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+          <Box sx={{ width: 280, p: 2 }}>
+            <Brand />
+            {user ? (
+              <Box sx={{ mt: 3 }}>
+                <Typography sx={{ fontWeight: 600 }}>{user.name}</Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ textTransform: "capitalize" }}>{user.role}</Typography>
+              </Box>
+            ) : null}
+            <Divider sx={{ my: 2 }} />
+            <List disablePadding>
+              {navItems.map((item) => (
+                <ListItemButton key={item.to} onClick={() => go(item.to)} sx={{ borderRadius: 2 }}>
+                  <ListItemText primary={item.label} />
+                </ListItemButton>
+              ))}
+            </List>
+            <Divider sx={{ my: 2 }} />
+            {user ? (
+              <Button fullWidth variant="outlined" color="inherit" onClick={() => void handleLogout()}>Log out</Button>
+            ) : (
+              <Stack spacing={1}>
+                <Button fullWidth variant="contained" onClick={() => go("/auth/register")}>Sign up</Button>
+                <Button fullWidth color="inherit" onClick={() => go("/auth/login")}>Log in</Button>
+              </Stack>
+            )}
+          </Box>
+        </Drawer>
+
+        <Container component="main" maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, flexGrow: 1 }}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/cars" replace />} />
+            <Route path="/cars" element={<CarsListPage />} />
+            <Route path="/cars/new" element={<CreateCarPage />} />
+            <Route path="/cars/:id" element={<CarDetailPage />} />
+            <Route path="/cars/:id/edit" element={<EditDeleteCarPage />} />
+            <Route path="/auth/login" element={<LoginPage />} />
+            <Route path="/auth/register" element={<RegisterPage />} />
+            <Route path="/bookings" element={<MyBookingsPage />} />
+            <Route path="/bookings/:id" element={<BookingDetailPage />} />
+            <Route path="*" element={<Navigate to="/cars" replace />} />
+          </Routes>
+        </Container>
+
+        <Box component="footer" sx={{ borderTop: "1px solid", borderColor: "divider", bgcolor: "background.paper", py: 3 }}>
+          <Container maxWidth="lg">
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ justifyContent: "space-between", color: "text.secondary" }}>
+              <Typography variant="body2">© {new Date().getFullYear()} DriveNow. All rights reserved.</Typography>
+              <Typography variant="body2">Secure payments by Stripe</Typography>
+            </Stack>
+          </Container>
+        </Box>
+      </Box>
     </ThemeProvider>
   );
 }

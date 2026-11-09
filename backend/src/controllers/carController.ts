@@ -9,6 +9,14 @@ import {
 } from "../services/carService.js";
 import { validateCarPayload } from "../utils/carValidation.js";
 
+// Drizzle wraps driver errors, so the Postgres code may sit on err.cause.
+function isForeignKeyViolation(err: unknown): boolean {
+  const codeOf = (value: unknown): unknown =>
+    typeof value === "object" && value !== null ? (value as { code?: unknown }).code : undefined;
+  const cause = typeof err === "object" && err !== null ? (err as { cause?: unknown }).cause : undefined;
+  return codeOf(err) === "23503" || codeOf(cause) === "23503";
+}
+
 type CarListQueryParams = {
   make?: string;
   available?: string;
@@ -161,7 +169,12 @@ export async function removeCar(req: Request<{ id: string }>, res: Response): Pr
   let deletedCar;
   try {
     deletedCar = await deleteCar(id);
-  } catch {
+  } catch (err) {
+    if (isForeignKeyViolation(err)) {
+      return res.status(409).json({
+        message: "This car has booking history and cannot be deleted. Mark it as unavailable instead.",
+      });
+    }
     return res.status(500).json({ message: "Failed to delete car" });
   }
 

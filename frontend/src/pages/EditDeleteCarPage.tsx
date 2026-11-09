@@ -1,23 +1,11 @@
 import type { SubmitEvent } from "react";
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  CardContent,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Divider,
-  Typography,
-} from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
+import { Alert, Box, Button, Card, Skeleton, Snackbar, Stack, Typography } from "@mui/material";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import CarForm from "../components/CarForm";
+import PageHeader from "../components/PageHeader";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { deleteCar, fetchCarById, updateCar } from "../lib/api";
 import { toCarFormState, toCarInput, type CarFormState } from "../types/car";
 
@@ -35,20 +23,13 @@ export default function EditDeleteCarPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(t);
-  }, [notice]);
-
-  useEffect(() => {
-    if (Number.isNaN(id)) { setError("Invalid car id"); return; }
+    if (!Number.isInteger(id) || id <= 0) { setError("Invalid car id"); return; }
 
     async function loadCar(): Promise<void> {
       setLoading(true);
       setError(null);
       try {
-        const car = await fetchCarById(id);
-        setForm(toCarFormState(car));
+        setForm(toCarFormState(await fetchCarById(id)));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load car");
       } finally {
@@ -60,12 +41,12 @@ export default function EditDeleteCarPage() {
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!form || Number.isNaN(id)) return;
+    if (!form) return;
+    setSubmitting(true);
     setError(null);
-    setNotice(null);
     try {
-      await updateCar(id, toCarInput(form));
-      setNotice("Car updated successfully.");
+      setForm(toCarFormState(await updateCar(id, toCarInput(form))));
+      setNotice("Changes saved.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update car");
     } finally {
@@ -74,7 +55,6 @@ export default function EditDeleteCarPage() {
   };
 
   async function handleDelete(): Promise<void> {
-    setConfirmOpen(false);
     setDeleting(true);
     try {
       await deleteCar(id);
@@ -82,63 +62,61 @@ export default function EditDeleteCarPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to delete car");
       setDeleting(false);
+      setConfirmOpen(false);
     }
   }
 
   return (
-    <Box>
-      <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Edit Car</Typography>
+    <Box sx={{ maxWidth: 760, mx: "auto" }}>
+      <PageHeader
+        eyebrow="Fleet"
+        title={form ? `Edit ${form.make} ${form.model}` : "Edit car"}
+        subtitle="Updates are visible to customers immediately."
+      />
 
-      {loading ? <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}><CircularProgress /></Box> : null}
       {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
-      {notice ? <Alert severity="success" sx={{ mb: 2 }}>{notice}</Alert> : null}
+      {loading ? <Skeleton variant="rounded" height={420} /> : null}
 
-      {form ? (
-        <Card variant="outlined">
-          <CardContent>
+      {form && !loading ? (
+        <Stack spacing={3}>
+          <Card sx={{ p: { xs: 2, sm: 4 } }}>
             <CarForm
               form={form}
               submitting={submitting}
               submitLabel="Save changes"
-              onCancel={() => navigate("/cars")}
+              onCancel={() => void navigate(`/cars/${id}`)}
               onSubmit={handleSubmit}
               onChange={setForm}
             />
+          </Card>
 
-            <Divider sx={{ my: 3 }} />
-
-            <Box>
-              <Typography variant="subtitle2" color="error" gutterBottom>
-                Danger zone
-              </Typography>
-              <Button
-                variant="outlined"
-                color="error"
-                startIcon={<DeleteIcon />}
-                disabled={deleting}
-                onClick={() => setConfirmOpen(true)}
-              >
-                {deleting ? "Deleting…" : "Delete this car"}
+          <Card sx={{ p: { xs: 2, sm: 3 }, borderColor: "error.light" }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}>
+              <Box>
+                <Typography sx={{ fontWeight: 600 }} color="error">Delete this car</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Cars with booking history can't be deleted. Mark them unavailable instead.
+                </Typography>
+              </Box>
+              <Button variant="outlined" color="error" startIcon={<DeleteOutlineIcon />} onClick={() => setConfirmOpen(true)}>
+                Delete car
               </Button>
-            </Box>
-          </CardContent>
-        </Card>
+            </Stack>
+          </Card>
+        </Stack>
       ) : null}
 
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-        <DialogTitle>Delete car?</DialogTitle>
-        <DialogContent>
-          <DialogContentText>
-            This action cannot be undone. The car will be permanently removed.
-          </DialogContentText>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={() => void handleDelete()}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Delete this car?"
+        message="This can't be undone. The car will be removed from the catalog permanently."
+        confirmLabel="Delete car"
+        busy={deleting}
+        onConfirm={() => void handleDelete()}
+        onClose={() => setConfirmOpen(false)}
+      />
+
+      <Snackbar open={notice !== null} autoHideDuration={3000} onClose={() => setNotice(null)} message={notice} anchorOrigin={{ vertical: "bottom", horizontal: "center" }} />
     </Box>
   );
 }

@@ -1,98 +1,108 @@
-import { and, count, desc, eq, inArray, lte, gte, ne } from "drizzle-orm";
-import { parseISO, differenceInCalendarDays } from "date-fns";
+import { and, count, desc, eq, gt, gte, inArray, lte, ne, or } from "drizzle-orm";
 import { db } from "../database/db.js";
-import { bookingIdempotencyTable, bookingsTable, carsTable, usersTable, SelectBooking } from "../database/schema.js";
+import { bookingIdempotencyTable, bookingsTable, carsTable, usersTable } from "../database/schema.js";
 import type { Booking, BookingWithCar } from "../types/booking.js";
 import type { UserRole } from "../types/user.js";
 import { AppError } from "../utils/AppError.js";
-import { stripe } from "../lib/stripe.js";
+import { mapJoinedRowToBooking, mapRowToBooking } from "../utils/bookingMappers.js";
+import { bookingRequestHash, calculateTotalPrice, canTransition, countRentalDays } from "../utils/bookingRules.js";
+import {
+  createCheckoutSession,
+  expireCheckoutSession,
+  getCheckoutSessionState,
+  refundPayment,
+} from "./paymentService.js";
 
-function mapRowToBooking(row: SelectBooking): Booking {
-  return {
-    id: row.id,
-    userId: row.userId,
-    carId: row.carId,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    totalPrice: row.totalPrice,
-    status: row.status,
-    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-  };
-}
+/**
+ * State-machine decision (Phase 6, Option A):
+ * the booking row is inserted as `pending_payment` together with the Checkout
+ * Session, and the webhook flips it to `confirmed`. The pending row acts as a
+ * hold so the overlap check from Phase 5 keeps protecting the slot while the
+ * customer is on the Stripe page. Holds expire with the Checkout Session
+ * (HOLD_MINUTES), so an abandoned checkout stops blocking the car even if the
+ * `checkout.session.expired` webhook never arrives.
+ *
+ * Lock order everywhere is: car row (anchor) -> booking rows. Using one order
+ * in create, modify and cancel prevents deadlocks between them.
+ */
 
-const IDEMPOTENCY_WINDOW_HOURS = 24;
-
-const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173";
-// Hold window for pending_payment bookings: 60 minutes (Stripe's minimum is 30 min)
 const HOLD_MINUTES = 60;
+// Stripe requires expires_at to be at least 30 minutes in the future.
+const MIN_REUSABLE_HOLD_MINUTES = 31;
+const IDEMPOTENCY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-/** Returned by createBooking and createBookingWithIdempotency */
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
 export type CreateBookingResult = {
   booking: Booking;
   checkoutUrl: string;
 };
 
-/**
- * Stripe checkout state-machine decision:
- *
- * Chosen option: A
- * - Create the booking row immediately with `pending_payment` when creating Checkout Session.
- * - Webhook (`checkout.session.completed`) flips status to `confirmed`.
- *
- * Why this is the preferred approach for rentals:
- * - Inventory is scarce (car + date range), so we must reserve while customer is on Checkout.
- * - Overlap checks can treat `pending_payment` as a temporary hold and prevent double-selling.
- * - Option B (insert only on webhook) allows multiple customers to pay for the same slot,
- *   forcing refunds and manual conflict resolution later.
- *
- * Trade-off acknowledged:
- * - We must expire/clean abandoned `pending_payment` holds (for example via webhook expiry
- *   and scheduled cleanup), but this is operationally safer than paid-order conflicts.
- */
+const joinedBookingColumns = {
+  id: bookingsTable.id,
+  userId: bookingsTable.userId,
+  carId: bookingsTable.carId,
+  startDate: bookingsTable.startDate,
+  endDate: bookingsTable.endDate,
+  totalPrice: bookingsTable.totalPrice,
+  status: bookingsTable.status,
+  refundStatus: bookingsTable.refundStatus,
+  holdExpiresAt: bookingsTable.holdExpiresAt,
+  createdAt: bookingsTable.createdAt,
+  carMake: carsTable.make,
+  carModel: carsTable.model,
+  carYear: carsTable.year,
+  carPricePerDay: carsTable.pricePerDay,
+  carImageUrl: carsTable.imageUrl,
+  customerName: usersTable.name,
+};
 
-type BookingTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-function getBookingRequestHash(carId: number, startDate: string, endDate: string): string {
-  return JSON.stringify({ carId, startDate, endDate });
+// A booking blocks the calendar if it is paid, or still inside its payment hold.
+function blocksCalendar() {
+  return or(
+    eq(bookingsTable.status, "confirmed"),
+    and(eq(bookingsTable.status, "pending_payment"), gt(bookingsTable.holdExpiresAt, new Date()))
+  );
 }
 
-async function createBookingInTx(
-  tx: BookingTx,
-  userId: number,
-  carId: number,
-  startDate: string,
-  endDate: string
-): Promise<{ booking: Booking; holdExpiresAt: Date; carLabel: string }> {
-  // Step 1 — Lock the car row as an "anchor".
-  // This forces all concurrent booking attempts for the same car to queue up
-  // one at a time, even when there are no existing bookings to lock yet.
-  const carRows = await tx
+function carLabel(car: { make: string; model: string; year: number }): string {
+  return `${car.make} ${car.model} (${car.year})`;
+}
+
+function newHoldExpiry(): Date {
+  return new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
+}
+
+async function lockCar(tx: Tx, carId: number) {
+  const [car] = await tx.select().from(carsTable).where(eq(carsTable.id, carId)).for("update").limit(1);
+  return car;
+}
+
+async function lockBooking(tx: Tx, bookingId: number) {
+  const [booking] = await tx
     .select()
-    .from(carsTable)
-    .where(eq(carsTable.id, carId))
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId))
     .for("update")
     .limit(1);
+  return booking;
+}
 
-  if (carRows.length === 0) {
-    throw new AppError(404, "Car not found");
-  }
-
-  const car = carRows[0];
-
-  if (!car.available) {
-    throw new AppError(409, "Car is not available for rental");
-  }
-
-  // Step 2 — Overlap detection with a row-level lock.
-  // Block both confirmed and active pending_payment bookings to prevent double-selling
-  // while another customer is still on the Stripe Checkout page.
+async function assertNoOverlap(
+  tx: Tx,
+  carId: number,
+  startDate: string,
+  endDate: string,
+  excludeBookingId?: number
+): Promise<void> {
   const overlapping = await tx
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
     .where(
       and(
         eq(bookingsTable.carId, carId),
-        inArray(bookingsTable.status, ["confirmed", "pending_payment"]),
+        blocksCalendar(),
+        excludeBookingId === undefined ? undefined : ne(bookingsTable.id, excludeBookingId),
         lte(bookingsTable.startDate, endDate),
         gte(bookingsTable.endDate, startDate)
       )
@@ -101,33 +111,26 @@ async function createBookingInTx(
     .limit(1);
 
   if (overlapping.length > 0) {
-    throw new AppError(409, "Car is already booked for the requested dates");
+    throw new AppError(409, "This car is already booked for those dates");
   }
+}
 
-  // Step 3 — Insert as pending_payment with a hold expiry.
-  // The hold reserves the slot while the customer completes Stripe Checkout.
-  const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-  const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
-  const holdExpiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
+// Reads ownership without a lock. carId never changes, so it is safe to use it
+// to take the car lock first and then re-read the booking under its own lock.
+async function findAccessibleBooking(
+  bookingId: number,
+  requesterId: number,
+  requesterRole: UserRole
+): Promise<{ carId: number } | null> {
+  const [row] = await db
+    .select({ userId: bookingsTable.userId, carId: bookingsTable.carId })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId))
+    .limit(1);
 
-  const rows = await tx
-    .insert(bookingsTable)
-    .values({
-      userId,
-      carId,
-      startDate,
-      endDate,
-      totalPrice,
-      status: "pending_payment",
-      holdExpiresAt,
-    })
-    .returning();
-
-  return {
-    booking: mapRowToBooking(rows[0]),
-    holdExpiresAt,
-    carLabel: `${car.make} ${car.model} (${car.year})`,
-  };
+  if (!row) return null;
+  if (requesterRole !== "admin" && row.userId !== requesterId) return null;
+  return { carId: row.carId };
 }
 
 export async function createBooking(
@@ -136,59 +139,74 @@ export async function createBooking(
   startDate: string,
   endDate: string
 ): Promise<CreateBookingResult> {
-  // Phase 1: DB transaction — reserve slot, insert pending_payment booking.
-  const { booking, holdExpiresAt, carLabel } = await db.transaction(async (tx) =>
-    createBookingInTx(tx, userId, carId, startDate, endDate)
-  );
+  const { booking, label, holdExpiresAt } = await db.transaction(async (tx) => {
+    const car = await lockCar(tx, carId);
+    if (!car) throw new AppError(404, "Car not found");
+    if (!car.available) throw new AppError(409, "This car is not available for rental at the moment");
 
-  // Phase 2: Create Stripe Checkout Session outside the transaction.
-  // Stripe API calls must not run inside a DB transaction (would hold locks too long).
-  const session = await stripe.checkout.sessions.create(
-    {
-      mode: "payment",
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `${carLabel} rental`,
-              description: `${startDate} – ${endDate}`,
-            },
-            unit_amount: Math.round(Number(booking.totalPrice) * 100), // Stripe uses cents
-          },
-          quantity: 1,
-        },
-      ],
-      client_reference_id: String(booking.id),
-      metadata: { bookingId: String(booking.id) },
-      success_url: `${FRONTEND_ORIGIN}/bookings/${booking.id}?payment=success`,
-      cancel_url: `${FRONTEND_ORIGIN}/cars/${carId}?payment=cancelled`,
-      expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
-    },
-    { idempotencyKey: `booking:create-checkout:v1:${booking.id}` }
-  );
+    await assertNoOverlap(tx, carId, startDate, endDate);
 
-  // Phase 3: Persist the session ID so we can retrieve the URL later if needed.
+    const hold = newHoldExpiry();
+    const [row] = await tx
+      .insert(bookingsTable)
+      .values({
+        userId,
+        carId,
+        startDate,
+        endDate,
+        totalPrice: calculateTotalPrice(startDate, endDate, car.pricePerDay),
+        status: "pending_payment",
+        holdExpiresAt: hold,
+      })
+      .returning();
+
+    return { booking: mapRowToBooking(row), label: carLabel(car), holdExpiresAt: hold };
+  });
+
+  // Stripe calls stay outside the transaction so the car lock is held only briefly.
+  let session;
+  try {
+    session = await createCheckoutSession({
+      bookingId: booking.id,
+      carId,
+      carLabel: label,
+      startDate,
+      endDate,
+      totalPrice: booking.totalPrice,
+      holdExpiresAt,
+      idempotencyKey: `booking:checkout:v1:${booking.id}:initial`,
+    });
+  } catch (err) {
+    console.error(`[Checkout] Failed to create session for booking ${booking.id}:`, err);
+    await db
+      .update(bookingsTable)
+      .set({ status: "cancelled" })
+      .where(and(eq(bookingsTable.id, booking.id), eq(bookingsTable.status, "pending_payment")));
+    throw new AppError(502, "We couldn't start the payment. Please try again in a moment.");
+  }
+
   await db
     .update(bookingsTable)
     .set({ stripeCheckoutSessionId: session.id })
     .where(eq(bookingsTable.id, booking.id));
 
-  return { booking, checkoutUrl: session.url! };
+  if (!session.url) throw new AppError(502, "Payment page is unavailable. Please try again.");
+  return { booking, checkoutUrl: session.url };
 }
 
-export async function createBookingWithIdempotency(
+type IdempotencyReservation =
+  | { kind: "cached"; statusCode: number; body: CreateBookingResult }
+  | { kind: "reserved"; id: number };
+
+// The unique (user_id, idempotency_key) index is the guarantee: two concurrent
+// requests with the same key cannot both reserve it.
+async function reserveIdempotencyKey(
   userId: number,
   idempotencyKey: string,
-  carId: number,
-  startDate: string,
-  endDate: string
-): Promise<{ statusCode: number; body: CreateBookingResult }> {
-  const requestHash = getBookingRequestHash(carId, startDate, endDate);
-
-  // Check the idempotency cache in its own transaction.
-  const cached = await db.transaction(async (tx) => {
-    const existingRows = await tx
+  requestHash: string
+): Promise<IdempotencyReservation> {
+  return db.transaction(async (tx) => {
+    const [existing] = await tx
       .select()
       .from(bookingIdempotencyTable)
       .where(
@@ -200,47 +218,66 @@ export async function createBookingWithIdempotency(
       .for("update")
       .limit(1);
 
-    if (existingRows.length > 0) {
-      const existing = existingRows[0];
-      const ageMs = Date.now() - existing.createdAt.getTime();
-      const withinWindow = ageMs <= IDEMPOTENCY_WINDOW_HOURS * 60 * 60 * 1000;
-
-      if (withinWindow) {
+    if (existing) {
+      const expired = Date.now() - existing.createdAt.getTime() > IDEMPOTENCY_WINDOW_MS;
+      if (!expired) {
         if (existing.requestHash !== requestHash) {
-          throw new AppError(409, "Idempotency-Key was already used with a different request body");
+          throw new AppError(422, "This Idempotency-Key was already used for a different booking request");
+        }
+        if (existing.responseStatus === null || existing.responseBody === null) {
+          throw new AppError(409, "A request with this Idempotency-Key is still being processed");
         }
         return {
+          kind: "cached",
           statusCode: existing.responseStatus,
           body: existing.responseBody as CreateBookingResult,
         };
       }
-
-      await tx
-        .delete(bookingIdempotencyTable)
-        .where(eq(bookingIdempotencyTable.id, existing.id));
+      await tx.delete(bookingIdempotencyTable).where(eq(bookingIdempotencyTable.id, existing.id));
     }
 
-    return null;
+    const inserted = await tx
+      .insert(bookingIdempotencyTable)
+      .values({ userId, idempotencyKey, requestHash })
+      .onConflictDoNothing()
+      .returning({ id: bookingIdempotencyTable.id });
+
+    if (inserted.length === 0) {
+      throw new AppError(409, "A request with this Idempotency-Key is still being processed");
+    }
+    return { kind: "reserved", id: inserted[0].id };
   });
+}
 
-  if (cached) return cached;
+export async function createBookingWithIdempotency(
+  userId: number,
+  idempotencyKey: string,
+  carId: number,
+  startDate: string,
+  endDate: string
+): Promise<{ statusCode: number; body: CreateBookingResult }> {
+  const reservation = await reserveIdempotencyKey(
+    userId,
+    idempotencyKey,
+    bookingRequestHash(carId, startDate, endDate)
+  );
 
-  // Cache miss — create booking + Stripe session.
-  const result = await createBooking(userId, carId, startDate, endDate);
+  if (reservation.kind === "cached") {
+    return { statusCode: reservation.statusCode, body: reservation.body };
+  }
 
-  // Store in idempotency cache. onConflictDoNothing handles the rare concurrent-retry race.
-  await db
-    .insert(bookingIdempotencyTable)
-    .values({
-      userId,
-      idempotencyKey,
-      requestHash,
-      responseStatus: 201,
-      responseBody: result,
-    })
-    .onConflictDoNothing();
-
-  return { statusCode: 201, body: result };
+  try {
+    const result = await createBooking(userId, carId, startDate, endDate);
+    await db
+      .update(bookingIdempotencyTable)
+      .set({ responseStatus: 201, responseBody: result })
+      .where(eq(bookingIdempotencyTable.id, reservation.id));
+    return { statusCode: 201, body: result };
+  } catch (err) {
+    // Release the key so the client can retry after a rejected or failed attempt.
+    await db.delete(bookingIdempotencyTable).where(eq(bookingIdempotencyTable.id, reservation.id));
+    throw err;
+  }
 }
 
 export type BookingListQuery = {
@@ -261,67 +298,25 @@ export type PaginatedBookings = {
 export async function getBookings(query: BookingListQuery): Promise<PaginatedBookings> {
   const limit = Math.min(Math.max(query.limit, 1), 100);
   const page = Math.max(1, query.page);
-  const offset = (page - 1) * limit;
+  const isAdmin = query.role === "admin";
+  const whereClause = isAdmin ? undefined : eq(bookingsTable.userId, query.userId);
 
-  const whereClause =
-    query.role === "admin" ? undefined : eq(bookingsTable.userId, query.userId);
-
-  const [totalResult] = await db
-    .select({ total: count() })
-    .from(bookingsTable)
-    .where(whereClause);
+  const [totalResult] = await db.select({ total: count() }).from(bookingsTable).where(whereClause);
 
   const rows = await db
-    .select({
-      id: bookingsTable.id,
-      userId: bookingsTable.userId,
-      carId: bookingsTable.carId,
-      startDate: bookingsTable.startDate,
-      endDate: bookingsTable.endDate,
-      totalPrice: bookingsTable.totalPrice,
-      status: bookingsTable.status,
-      createdAt: bookingsTable.createdAt,
-      carMake: carsTable.make,
-      carModel: carsTable.model,
-      carYear: carsTable.year,
-      carPricePerDay: carsTable.pricePerDay,
-      customerName: usersTable.name,
-    })
+    .select(joinedBookingColumns)
     .from(bookingsTable)
     .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
     .leftJoin(usersTable, eq(bookingsTable.userId, usersTable.id))
     .where(whereClause)
     .orderBy(desc(bookingsTable.id))
     .limit(limit)
-    .offset(offset);
+    .offset((page - 1) * limit);
 
   const total = Number(totalResult?.total ?? 0);
 
-  const data: BookingWithCar[] = rows.map((row) => ({
-    id: row.id,
-    userId: row.userId,
-    carId: row.carId,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    totalPrice: row.totalPrice,
-    status: row.status,
-    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-    car:
-      row.carMake !== null
-        ? {
-            make: row.carMake,
-            model: row.carModel!,
-            year: row.carYear!,
-            pricePerDay: row.carPricePerDay!,
-          }
-        : null,
-    ...(query.role === "admin" && row.customerName
-      ? { customerName: row.customerName }
-      : {}),
-  }));
-
   return {
-    data,
+    data: rows.map((row) => mapJoinedRowToBooking(row, isAdmin)),
     total,
     page,
     limit,
@@ -334,163 +329,96 @@ export async function getBookingById(
   requesterId: number,
   requesterRole: UserRole
 ): Promise<BookingWithCar | null> {
-  const rows = await db
-    .select({
-      id: bookingsTable.id,
-      userId: bookingsTable.userId,
-      carId: bookingsTable.carId,
-      startDate: bookingsTable.startDate,
-      endDate: bookingsTable.endDate,
-      totalPrice: bookingsTable.totalPrice,
-      status: bookingsTable.status,
-      createdAt: bookingsTable.createdAt,
-      carMake: carsTable.make,
-      carModel: carsTable.model,
-      carYear: carsTable.year,
-      carPricePerDay: carsTable.pricePerDay,
-    })
+  const [row] = await db
+    .select(joinedBookingColumns)
     .from(bookingsTable)
     .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
+    .leftJoin(usersTable, eq(bookingsTable.userId, usersTable.id))
     .where(eq(bookingsTable.id, id))
     .limit(1);
 
-  if (rows.length === 0) return null;
-
-  const row = rows[0];
-
-  // Customers may only see their own bookings — return null so the caller issues 404.
+  if (!row) return null;
+  // Customers get a 404 for other people's bookings so we don't leak that they exist.
   if (requesterRole !== "admin" && row.userId !== requesterId) return null;
-
-  return {
-    id: row.id,
-    userId: row.userId,
-    carId: row.carId,
-    startDate: row.startDate,
-    endDate: row.endDate,
-    totalPrice: row.totalPrice,
-    status: row.status,
-    createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-    car:
-      row.carMake !== null
-        ? {
-            make: row.carMake,
-            model: row.carModel!,
-            year: row.carYear!,
-            pricePerDay: row.carPricePerDay!,
-          }
-        : null,
-  };
+  return mapJoinedRowToBooking(row, requesterRole === "admin");
 }
+
+/**
+ * Refund decision: we wait for Stripe to *accept* the refund request so the
+ * customer gets immediate feedback, but the final outcome is reconciled by the
+ * `charge.refunded` / `refund.failed` webhooks, because refunds settle
+ * asynchronously. The idempotency key is derived from the booking id, so a
+ * double-click or a retry returns the original refund instead of a second one.
+ */
+export async function issueRefund(bookingId: number, paymentIntentId: string): Promise<void> {
+  try {
+    const refund = await refundPayment(bookingId, paymentIntentId);
+    const refundStatus =
+      refund.status === "succeeded" ? "succeeded" : refund.status === "failed" || refund.status === "canceled" ? "failed" : "pending";
+
+    // Never downgrade a "succeeded" the webhook may already have written.
+    await db
+      .update(bookingsTable)
+      .set({ stripeRefundId: refund.id, refundStatus })
+      .where(and(eq(bookingsTable.id, bookingId), inArray(bookingsTable.refundStatus, ["pending", "failed"])));
+  } catch (err) {
+    console.error(`[Refund] Failed to refund booking ${bookingId}:`, err);
+    await db
+      .update(bookingsTable)
+      .set({ refundStatus: "failed" })
+      .where(and(eq(bookingsTable.id, bookingId), eq(bookingsTable.refundStatus, "pending")));
+  }
+}
+
+type CancelFollowUp =
+  | { action: "refund"; paymentIntentId: string }
+  | { action: "expireCheckout"; sessionId: string }
+  | { action: "none" };
 
 export async function cancelBooking(
   id: number,
   requesterId: number,
   requesterRole: UserRole
 ): Promise<BookingWithCar | null> {
-  let stripePaymentIntentId: string | null = null;
-  let wasConfirmed = false;
+  const target = await findAccessibleBooking(id, requesterId, requesterRole);
+  if (!target) return null;
 
-  const result = await db.transaction(async (tx) => {
-    // Read the booking inside the transaction so it uses the same connection.
-    const bookingRows = await tx
-      .select({
-        id: bookingsTable.id,
-        userId: bookingsTable.userId,
-        carId: bookingsTable.carId,
-        startDate: bookingsTable.startDate,
-        endDate: bookingsTable.endDate,
-        totalPrice: bookingsTable.totalPrice,
-        status: bookingsTable.status,
-        stripePaymentIntentId: bookingsTable.stripePaymentIntentId,
-        createdAt: bookingsTable.createdAt,
-        carMake: carsTable.make,
-        carModel: carsTable.model,
-        carYear: carsTable.year,
-        carPricePerDay: carsTable.pricePerDay,
-      })
-      .from(bookingsTable)
-      .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
-      .where(eq(bookingsTable.id, id))
-      .limit(1);
+  const followUp = await db.transaction(async (tx): Promise<CancelFollowUp> => {
+    await lockCar(tx, target.carId);
+    const booking = await lockBooking(tx, id);
 
-    if (bookingRows.length === 0) return null;
-
-    const row = bookingRows[0];
-
-    // Customers may only cancel their own bookings.
-    if (requesterRole !== "admin" && row.userId !== requesterId) return null;
-
-    const existing: BookingWithCar = {
-      id: row.id,
-      userId: row.userId,
-      carId: row.carId,
-      startDate: row.startDate,
-      endDate: row.endDate,
-      totalPrice: row.totalPrice,
-      status: row.status,
-      createdAt: row.createdAt ? row.createdAt.toISOString() : null,
-      car: row.carMake !== null
-        ? {
-            make: row.carMake,
-            model: row.carModel!,
-            year: row.carYear!,
-            pricePerDay: row.carPricePerDay!,
-          }
-        : null,
-    };
-
-    // Lock the car row as the anchor — prevents a concurrent modify from
-    // updating dates on this booking after we've read it as "confirmed" but
-    // before we flip it to "cancelled".
-    await tx
-      .select({ id: carsTable.id })
-      .from(carsTable)
-      .where(eq(carsTable.id, existing.carId))
-      .for("update")
-      .limit(1);
-
-    // Re-check status under the lock. A concurrent cancel may have already
-    // flipped it between our read above and acquiring the lock.
-    if (existing.status === "cancelled") {
-      throw new AppError(409, "Booking is already cancelled");
+    if (!canTransition(booking.status, "cancelled")) {
+      // Cancelling again is how a customer retries a refund that failed.
+      if (booking.refundStatus === "failed" && booking.stripePaymentIntentId) {
+        await tx.update(bookingsTable).set({ refundStatus: "pending" }).where(eq(bookingsTable.id, id));
+        return { action: "refund", paymentIntentId: booking.stripePaymentIntentId };
+      }
+      throw new AppError(409, "This booking is already cancelled");
     }
 
-    // Capture refund info before committing the cancellation.
-    wasConfirmed = existing.status === "confirmed";
-    stripePaymentIntentId = row.stripePaymentIntentId ?? null;
+    const needsRefund = booking.status === "confirmed" && booking.stripePaymentIntentId !== null;
 
-    const rows = await tx
+    await tx
       .update(bookingsTable)
-      .set({ status: "cancelled" })
-      .where(eq(bookingsTable.id, id))
-      .returning();
+      .set({ status: "cancelled", ...(needsRefund ? { refundStatus: "pending" as const } : {}) })
+      .where(eq(bookingsTable.id, id));
 
-    return {
-      ...existing,
-      status: rows[0].status,
-    };
+    if (needsRefund && booking.stripePaymentIntentId) {
+      return { action: "refund", paymentIntentId: booking.stripePaymentIntentId };
+    }
+    if (booking.status === "pending_payment" && booking.stripeCheckoutSessionId) {
+      return { action: "expireCheckout", sessionId: booking.stripeCheckoutSessionId };
+    }
+    return { action: "none" };
   });
 
-  // Issue Stripe refund outside the DB transaction.
-  // Decision: we await stripe.refunds.create() so the customer gets immediate
-  // confirmation that the refund was initiated. The actual bank credit is
-  // asynchronous regardless. The charge.refunded webhook can reconcile if needed.
-  // Using a stable idempotency key means a double-cancel attempt hits the same
-  // refund object rather than creating a second refund.
-  if (result && wasConfirmed && stripePaymentIntentId) {
-    try {
-      await stripe.refunds.create(
-        { payment_intent: stripePaymentIntentId },
-        { idempotencyKey: `booking:refund:v1:${id}` }
-      );
-    } catch (err) {
-      // Log but do not fail the cancel — the booking is already cancelled in DB.
-      // The refund can be retried manually or via Stripe dashboard.
-      console.warn(`[Refund] Failed to issue refund for booking ${id}:`, err);
-    }
+  if (followUp.action === "refund") {
+    await issueRefund(id, followUp.paymentIntentId);
+  } else if (followUp.action === "expireCheckout") {
+    await expireCheckoutSession(followUp.sessionId);
   }
 
-  return result;
+  return getBookingById(id, requesterId, requesterRole);
 }
 
 export async function modifyBooking(
@@ -500,195 +428,101 @@ export async function modifyBooking(
   startDate: string,
   endDate: string
 ): Promise<BookingWithCar | null> {
-  return db.transaction(async (tx) => {
-    // Fetch the booking inside the transaction so it uses the same connection.
-    // Using getBookingById (which uses `db`) outside the transaction would
-    // consume a separate connection from the pool and cause deadlocks under concurrency.
-    const bookingRows = await tx
-      .select({
-        id: bookingsTable.id,
-        userId: bookingsTable.userId,
-        carId: bookingsTable.carId,
-        startDate: bookingsTable.startDate,
-        endDate: bookingsTable.endDate,
-        totalPrice: bookingsTable.totalPrice,
-        status: bookingsTable.status,
-        createdAt: bookingsTable.createdAt,
-        carMake: carsTable.make,
-        carModel: carsTable.model,
-        carYear: carsTable.year,
-        carPricePerDay: carsTable.pricePerDay,
-      })
-      .from(bookingsTable)
-      .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
-      .where(eq(bookingsTable.id, bookingId))
-      .for("update")
-      .limit(1);
+  const target = await findAccessibleBooking(bookingId, requesterId, requesterRole);
+  if (!target) return null;
 
-    if (bookingRows.length === 0) return null;
+  await db.transaction(async (tx) => {
+    await lockCar(tx, target.carId);
+    const booking = await lockBooking(tx, bookingId);
 
-    const bookingRow = bookingRows[0];
-
-    // Customers may only modify their own bookings.
-    if (requesterRole !== "admin" && bookingRow.userId !== requesterId) return null;
-
-    const existing: BookingWithCar = {
-      id: bookingRow.id,
-      userId: bookingRow.userId,
-      carId: bookingRow.carId,
-      startDate: bookingRow.startDate,
-      endDate: bookingRow.endDate,
-      totalPrice: bookingRow.totalPrice,
-      status: bookingRow.status,
-      createdAt: bookingRow.createdAt ? bookingRow.createdAt.toISOString() : null,
-      car: bookingRow.carMake !== null
-        ? {
-            make: bookingRow.carMake,
-            model: bookingRow.carModel!,
-            year: bookingRow.carYear!,
-            pricePerDay: bookingRow.carPricePerDay!,
-          }
-        : null,
-    };
-
-    // Lock the car row as the anchor — serializes all concurrent modifications
-    // and cancels for the same car. Acquiring this lock before the status check
-    // ensures that a concurrent cancelBooking (which also locks the car row) cannot
-    // flip this booking to "cancelled" between our read and our update.
-    const carRows = await tx
-      .select()
-      .from(carsTable)
-      .where(eq(carsTable.id, existing.carId))
-      .for("update")
-      .limit(1);
-
-    if (carRows.length === 0) {
-      throw new AppError(404, "Car not found");
-    }
-
-    const car = carRows[0];
-
-    // Status check happens AFTER acquiring the lock so it reflects committed state.
-    // Any concurrent cancel that ran before us will have already committed by the
-    // time we get here, and we will see status = "cancelled" correctly.
-    if (existing.status === "cancelled") {
+    if (booking.status === "cancelled") {
       throw new AppError(409, "Cannot modify a cancelled booking");
     }
-
-    // Overlap check — exclude the booking being modified itself (id != bookingId),
-    // otherwise shifting dates that still overlap the original range would always fail.
-    // Block both confirmed and pending_payment to prevent double-selling.
-    const overlapping = await tx
-      .select({ id: bookingsTable.id })
-      .from(bookingsTable)
-      .where(
-        and(
-          eq(bookingsTable.carId, existing.carId),
-          inArray(bookingsTable.status, ["confirmed", "pending_payment"]),
-          ne(bookingsTable.id, bookingId),
-          lte(bookingsTable.startDate, endDate),
-          gte(bookingsTable.endDate, startDate)
-        )
-      )
-      .for("update")
-      .limit(1);
-
-    if (overlapping.length > 0) {
-      throw new AppError(409, "Car is already booked for the requested dates");
+    // Changing a pending booking would make the open Checkout charge the old amount.
+    if (booking.status !== "confirmed") {
+      throw new AppError(409, "Please complete payment before changing the dates of this booking");
     }
 
-    // Recompute price based on the new date range and the car's current pricePerDay.
-    const days = differenceInCalendarDays(parseISO(endDate), parseISO(startDate)) + 1;
-    const totalPrice = (days * Number(car.pricePerDay)).toFixed(2);
+    await assertNoOverlap(tx, target.carId, startDate, endDate, bookingId);
+
+    // The amount was already charged, so a reschedule must keep the same paid length.
+    if (countRentalDays(startDate, endDate) !== countRentalDays(booking.startDate, booking.endDate)) {
+      throw new AppError(
+        409,
+        "A paid booking can be moved to new dates but must keep the same number of days. To change the length, cancel for a refund and book again."
+      );
+    }
 
     await tx
       .update(bookingsTable)
-      .set({ startDate, endDate, totalPrice })
+      .set({ startDate, endDate })
       .where(eq(bookingsTable.id, bookingId));
-
-    return { ...existing, startDate, endDate, totalPrice };
   });
+
+  return getBookingById(bookingId, requesterId, requesterRole);
 }
 
 /**
- * Returns a Stripe Checkout URL for a pending_payment booking.
- * If the existing session is still open, reuses it.
- * If it has expired, creates a new session and updates the booking.
- * Returns null if the booking is not found, not owned by the requester,
- * or is not in pending_payment status.
+ * "Complete payment": reuse the open Checkout Session if there is one,
+ * otherwise renew the hold (re-checking overlap, since the slot may have been
+ * taken after the old hold lapsed) and create a fresh session.
  */
 export async function getCheckoutUrl(
   bookingId: number,
   requesterId: number,
   requesterRole: UserRole
 ): Promise<string | null> {
-  const rows = await db
-    .select({
-      id: bookingsTable.id,
-      userId: bookingsTable.userId,
-      carId: bookingsTable.carId,
-      startDate: bookingsTable.startDate,
-      endDate: bookingsTable.endDate,
-      totalPrice: bookingsTable.totalPrice,
-      status: bookingsTable.status,
-      stripeCheckoutSessionId: bookingsTable.stripeCheckoutSessionId,
-      carMake: carsTable.make,
-      carModel: carsTable.model,
-      carYear: carsTable.year,
-    })
-    .from(bookingsTable)
-    .leftJoin(carsTable, eq(bookingsTable.carId, carsTable.id))
-    .where(eq(bookingsTable.id, bookingId))
-    .limit(1);
+  const target = await findAccessibleBooking(bookingId, requesterId, requesterRole);
+  if (!target) return null;
 
-  if (rows.length === 0) return null;
-  const row = rows[0];
+  const [current] = await db.select().from(bookingsTable).where(eq(bookingsTable.id, bookingId)).limit(1);
+  if (current.status !== "pending_payment") {
+    throw new AppError(409, current.status === "confirmed" ? "This booking is already paid" : "This booking was cancelled");
+  }
 
-  if (requesterRole !== "admin" && row.userId !== requesterId) return null;
-  if (row.status !== "pending_payment") return null;
-
-  // Try to reuse the existing session if it is still open.
-  if (row.stripeCheckoutSessionId) {
-    try {
-      const session = await stripe.checkout.sessions.retrieve(row.stripeCheckoutSessionId);
-      if (session.status === "open" && session.url) {
-        return session.url;
-      }
-    } catch {
-      // Session not found — fall through to create a new one.
+  if (current.stripeCheckoutSessionId) {
+    const session = await getCheckoutSessionState(current.stripeCheckoutSessionId);
+    if (session.state === "open") return session.url;
+    if (session.state === "complete") {
+      throw new AppError(409, "Payment received. Your booking is being confirmed, please refresh in a moment.");
     }
   }
 
-  // Create a fresh Checkout Session (previous one expired or was never stored).
-  const holdExpiresAt = new Date(Date.now() + HOLD_MINUTES * 60 * 1000);
-  const carLabel = `${row.carMake} ${row.carModel} (${row.carYear})`;
+  const renewal = await db.transaction(async (tx) => {
+    const car = await lockCar(tx, target.carId);
+    const booking = await lockBooking(tx, bookingId);
+    if (booking.status !== "pending_payment") throw new AppError(409, "This booking is no longer awaiting payment");
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    line_items: [
-      {
-        price_data: {
-          currency: "usd",
-          product_data: {
-            name: `${carLabel} rental`,
-            description: `${row.startDate} – ${row.endDate}`,
-          },
-          unit_amount: Math.round(Number(row.totalPrice) * 100),
-        },
-        quantity: 1,
-      },
-    ],
-    client_reference_id: String(bookingId),
-    metadata: { bookingId: String(bookingId) },
-    success_url: `${FRONTEND_ORIGIN}/bookings/${bookingId}?payment=success`,
-    cancel_url: `${FRONTEND_ORIGIN}/cars/${row.carId}?payment=cancelled`,
-    expires_at: Math.floor(holdExpiresAt.getTime() / 1000),
+    const minReusable = Date.now() + MIN_REUSABLE_HOLD_MINUTES * 60 * 1000;
+    let holdExpiresAt = booking.holdExpiresAt;
+
+    // A concurrent click may already have renewed the hold; reuse it so both
+    // requests send identical params with the same Stripe idempotency key.
+    if (!holdExpiresAt || holdExpiresAt.getTime() < minReusable) {
+      await assertNoOverlap(tx, target.carId, booking.startDate, booking.endDate, bookingId);
+      holdExpiresAt = newHoldExpiry();
+      await tx.update(bookingsTable).set({ holdExpiresAt }).where(eq(bookingsTable.id, bookingId));
+    }
+
+    return { booking, car, holdExpiresAt };
+  });
+
+  const session = await createCheckoutSession({
+    bookingId,
+    carId: target.carId,
+    carLabel: carLabel(renewal.car),
+    startDate: renewal.booking.startDate,
+    endDate: renewal.booking.endDate,
+    totalPrice: renewal.booking.totalPrice,
+    holdExpiresAt: renewal.holdExpiresAt,
+    idempotencyKey: `booking:checkout:v1:${bookingId}:${current.stripeCheckoutSessionId ?? "initial"}`,
   });
 
   await db
     .update(bookingsTable)
-    .set({ stripeCheckoutSessionId: session.id, holdExpiresAt })
+    .set({ stripeCheckoutSessionId: session.id })
     .where(eq(bookingsTable.id, bookingId));
 
-  return session.url!;
+  if (!session.url) throw new AppError(502, "Payment page is unavailable. Please try again.");
+  return session.url;
 }
