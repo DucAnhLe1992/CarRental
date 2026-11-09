@@ -36,10 +36,11 @@ Detailed design notes (state machine, locking, idempotency, webhook trust bounda
 
 ## Quick Start
 
-From repo root:
+From repo root, install each package (the backend and frontend have separate lockfiles):
 
 ```bash
-npm install
+npm ci --prefix backend
+npm ci --prefix frontend
 ```
 
 Configure `backend/.env` from `backend/.env.template`, then initialize the database:
@@ -84,7 +85,7 @@ Backend scripts:
 | npm run db:migrate | Run SQL migrations |
 | npm run db:push | Push schema directly (non-migration workflow) |
 | npm test | Run unit tests (vitest) |
-| npm run test:integration | Run HTTP + database integration tests (embedded Postgres, or `TEST_DATABASE_URL`) |
+| npm run test:integration | Run HTTP + database integration tests (embedded Postgres by default; external `TEST_DATABASE_URL` requires explicit destructive-test opt-in) |
 | npm run typecheck | Type-check without emitting |
 
 Database workflow:
@@ -95,6 +96,8 @@ Database workflow:
 4. For local development only, run `npm run db:seed` to insert missing metadata from `backend/migrations/cars.json` and `users.json`.
 
 The seed command is additive and idempotent: existing cars and users are left unchanged, and fixture passwords are bcrypt-hashed before insertion. It refuses to run with `NODE_ENV=production`. The user fixture contains demo credentials and must not be used as production account data. Use migrations rather than `db:push` for deployed environments.
+
+Integration tests use embedded Postgres by default. If using `TEST_DATABASE_URL`, the database must be disposable, its name must contain a `test` segment, and `ALLOW_DESTRUCTIVE_TEST_DATABASE=true` must be set. The suite applies migrations and truncates all application tables; never point it at development or production data.
 
 Frontend scripts: `npm run lint`, `npm test` (vitest), `npm run build`.
 
