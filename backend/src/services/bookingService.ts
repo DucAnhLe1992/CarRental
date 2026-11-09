@@ -5,7 +5,7 @@ import type { Booking, BookingWithCar } from "../types/booking.js";
 import type { UserRole } from "../types/user.js";
 import { AppError } from "../utils/AppError.js";
 import { mapJoinedRowToBooking, mapRowToBooking } from "../utils/bookingMappers.js";
-import { bookingRequestHash, calculateTotalPrice, canTransition, countRentalDays } from "../utils/bookingRules.js";
+import { bookingRequestHash, calculateTotalPrice, canTransition, countRentalDays, paidBookingAction } from "../utils/bookingRules.js";
 import {
   createCheckoutSession,
   expireCheckoutSession,
@@ -88,13 +88,13 @@ async function lockBooking(tx: Tx, bookingId: number) {
   return booking;
 }
 
-async function assertNoOverlap(
+async function findOverlappingBooking(
   tx: Tx,
   carId: number,
   startDate: string,
   endDate: string,
   excludeBookingId?: number
-): Promise<void> {
+): Promise<boolean> {
   const overlapping = await tx
     .select({ id: bookingsTable.id })
     .from(bookingsTable)
@@ -110,7 +110,17 @@ async function assertNoOverlap(
     .for("update")
     .limit(1);
 
-  if (overlapping.length > 0) {
+  return overlapping.length > 0;
+}
+
+async function assertNoOverlap(
+  tx: Tx,
+  carId: number,
+  startDate: string,
+  endDate: string,
+  excludeBookingId?: number
+): Promise<void> {
+  if (await findOverlappingBooking(tx, carId, startDate, endDate, excludeBookingId)) {
     throw new AppError(409, "This car is already booked for those dates");
   }
 }
@@ -131,6 +141,46 @@ async function findAccessibleBooking(
   if (!row) return null;
   if (requesterRole !== "admin" && row.userId !== requesterId) return null;
   return { carId: row.carId };
+}
+
+export async function confirmPaidBooking(
+  tx: Tx,
+  bookingId: number,
+  paymentIntentId: string
+): Promise<{ refund: { bookingId: number; paymentIntentId: string } } | null> {
+  const [target] = await tx
+    .select({ carId: bookingsTable.carId })
+    .from(bookingsTable)
+    .where(eq(bookingsTable.id, bookingId))
+    .limit(1);
+  if (!target) return null;
+
+  await lockCar(tx, target.carId);
+  const booking = await lockBooking(tx, bookingId);
+  if (!booking) return null;
+
+  const hasOverlap = booking.status === "pending_payment"
+    ? await findOverlappingBooking(tx, target.carId, booking.startDate, booking.endDate, bookingId)
+    : false;
+  const action = paidBookingAction(booking.status, hasOverlap);
+
+  if (action === "confirm") {
+    await tx
+      .update(bookingsTable)
+      .set({ status: "confirmed", stripePaymentIntentId: paymentIntentId })
+      .where(eq(bookingsTable.id, bookingId));
+    return null;
+  }
+
+  if (action === "refund") {
+    await tx
+      .update(bookingsTable)
+      .set({ status: "cancelled", stripePaymentIntentId: paymentIntentId, refundStatus: "pending" })
+      .where(eq(bookingsTable.id, bookingId));
+    return { refund: { bookingId, paymentIntentId } };
+  }
+
+  return null;
 }
 
 export async function createBooking(

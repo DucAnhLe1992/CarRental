@@ -40,7 +40,9 @@ export const usersTable = pgTable("users", {
   password: varchar("password").notNull(),
   role: varchar("role", { enum: ["admin", "customer"] }).notNull().default("customer"),
   createdAt: timestamp("created_at").defaultNow(),
-});
+}, (t) => [
+  check("users_role_check", sql`${t.role} IN ('admin', 'customer')`),
+]);
 
 export type InsertUser = typeof usersTable.$inferInsert;
 export type SelectUser = typeof usersTable.$inferSelect;

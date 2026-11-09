@@ -40,6 +40,15 @@ From repo root:
 
 ```bash
 npm install
+```
+
+Configure `backend/.env` from `backend/.env.template`, then initialize the database:
+
+For Neon, keep the pooled endpoint in `DATABASE_URL` and put the direct endpoint in `DATABASE_DIRECT_URL`. The app uses only `DATABASE_URL`; `db:generate` and `db:migrate` prefer `DATABASE_DIRECT_URL`.
+
+```bash
+npm run db:migrate
+npm run db:seed # optional local demo data
 npm run dev
 ```
 
@@ -60,6 +69,9 @@ Root scripts:
 | npm run build | Build backend + frontend |
 | npm run build:backend | Build backend only |
 | npm run build:frontend | Build frontend only |
+| npm run db:generate -- --name=change_name | Generate a migration from the Drizzle schema |
+| npm run db:migrate | Apply committed migrations to the configured database |
+| npm run db:seed | Add the development car and user fixtures |
 | npm run start:backend | Run built backend |
 | npm run preview:frontend | Preview built frontend |
 
@@ -73,6 +85,15 @@ Backend scripts:
 | npm run db:push | Push schema directly (non-migration workflow) |
 | npm test | Run unit tests (vitest) |
 | npm run typecheck | Type-check without emitting |
+
+Database workflow:
+
+1. Update `backend/src/database/schema.ts`.
+2. Run `npm run db:generate -- --name=change_name` and review the generated SQL and snapshot.
+3. Commit both migration files, then run `npm run db:migrate` against the target database.
+4. For local development only, run `npm run db:seed` to insert missing metadata from `backend/migrations/cars.json` and `users.json`.
+
+The seed command is additive and idempotent: existing cars and users are left unchanged, and fixture passwords are bcrypt-hashed before insertion. It refuses to run with `NODE_ENV=production`. The user fixture contains demo credentials and must not be used as production account data. Use migrations rather than `db:push` for deployed environments.
 
 Frontend scripts: `npm run lint`, `npm test` (vitest), `npm run build`.
 
@@ -88,7 +109,8 @@ Backend .env:
 | Variable | Required | Description |
 |---|---|---|
 | PORT | No | API port (default 3000) |
-| DATABASE_URL | Yes | PostgreSQL connection string |
+| DATABASE_URL | Yes | Runtime PostgreSQL connection string; use the pooled Neon endpoint |
+| DATABASE_DIRECT_URL | No | Direct PostgreSQL connection for Drizzle migrations; falls back to `DATABASE_URL` for local or single-endpoint databases |
 | JWT_SECRET | Yes | JWT signing secret |
 | FRONTEND_ORIGIN | No | CORS origin (default http://localhost:5173) |
 | STRIPE_SECRET_KEY | Yes | Stripe secret/restricted test key |

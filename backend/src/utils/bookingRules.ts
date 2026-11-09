@@ -56,6 +56,14 @@ export function canTransition(from: BookingStatus, to: BookingStatus): boolean {
   return ALLOWED_TRANSITIONS[from].includes(to);
 }
 
+export type PaidBookingAction = "confirm" | "refund" | "ignore";
+
+export function paidBookingAction(status: BookingStatus, hasOverlap: boolean): PaidBookingAction {
+  if (status === "cancelled") return "refund";
+  if (status === "pending_payment") return hasOverlap ? "refund" : "confirm";
+  return "ignore";
+}
+
 export function bookingRequestHash(carId: number, startDate: string, endDate: string): string {
   return JSON.stringify({ carId, startDate, endDate });
 }

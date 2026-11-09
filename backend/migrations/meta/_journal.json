@@ -19,7 +19,7 @@
     {
       "idx": 2,
       "version": "7",
-      "when": 1745827200000,
+      "when": 1776844800000,
       "tag": "0002_create_bookings_table",
       "breakpoints": true
     },
@@ -49,6 +49,13 @@
       "version": "7",
       "when": 1780636800000,
       "tag": "0006_refund_tracking_and_idempotency_reservation",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1794233797819,
+      "tag": "0007_api_schema_alignment",
       "breakpoints": true
     }
   ]

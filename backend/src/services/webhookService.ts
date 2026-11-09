@@ -2,8 +2,8 @@ import type Stripe from "stripe";
 import { and, eq, ne } from "drizzle-orm";
 import { db } from "../database/db.js";
 import { bookingsTable, stripeEventsTable } from "../database/schema.js";
-import { canTransition, parsePositiveInt } from "../utils/bookingRules.js";
-import { issueRefund } from "./bookingService.js";
+import { parsePositiveInt } from "../utils/bookingRules.js";
+import { confirmPaidBooking, issueRefund } from "./bookingService.js";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type FollowUp = { refund: { bookingId: number; paymentIntentId: string } } | null;
@@ -21,34 +21,7 @@ async function markPaid(tx: Tx, session: Stripe.Checkout.Session): Promise<Follo
   const bookingId = bookingIdFromSession(session);
   const paymentIntentId = paymentIntentIdOf(session.payment_intent);
   if (!bookingId || !paymentIntentId) return null;
-
-  const [booking] = await tx
-    .select({ status: bookingsTable.status })
-    .from(bookingsTable)
-    .where(eq(bookingsTable.id, bookingId))
-    .for("update")
-    .limit(1);
-  if (!booking) return null;
-
-  if (canTransition(booking.status, "confirmed")) {
-    await tx
-      .update(bookingsTable)
-      .set({ status: "confirmed", stripePaymentIntentId: paymentIntentId })
-      .where(eq(bookingsTable.id, bookingId));
-    return null;
-  }
-
-  // Paid after the booking was cancelled (or its hold expired): the slot is no
-  // longer reserved for this customer, so give the money back.
-  if (booking.status === "cancelled") {
-    await tx
-      .update(bookingsTable)
-      .set({ stripePaymentIntentId: paymentIntentId, refundStatus: "pending" })
-      .where(eq(bookingsTable.id, bookingId));
-    return { refund: { bookingId, paymentIntentId } };
-  }
-
-  return null;
+  return confirmPaidBooking(tx, bookingId, paymentIntentId);
 }
 
 async function releaseHold(tx: Tx, session: Stripe.Checkout.Session): Promise<void> {

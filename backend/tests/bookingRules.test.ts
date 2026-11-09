@@ -5,6 +5,7 @@ import {
   canTransition,
   countRentalDays,
   isIsoDate,
+  paidBookingAction,
   parsePositiveInt,
   todayIso,
   toStripeAmount,
@@ -87,6 +88,18 @@ describe("booking state machine", () => {
     expect(canTransition("cancelled", "cancelled")).toBe(false);
     expect(canTransition("confirmed", "pending_payment")).toBe(false);
     expect(canTransition("confirmed", "confirmed")).toBe(false);
+  });
+});
+
+describe("paid booking resolution", () => {
+  it("confirms a pending booking only when no other booking overlaps", () => {
+    expect(paidBookingAction("pending_payment", false)).toBe("confirm");
+    expect(paidBookingAction("pending_payment", true)).toBe("refund");
+  });
+
+  it("refunds payments for cancelled bookings and ignores already confirmed ones", () => {
+    expect(paidBookingAction("cancelled", false)).toBe("refund");
+    expect(paidBookingAction("confirmed", false)).toBe("ignore");
   });
 });
 
