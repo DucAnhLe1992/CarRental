@@ -261,7 +261,7 @@ Important:
 
 - Backend unit tests live in `backend/tests/` and cover date validation, pricing, the booking state machine, idempotency hashing, row mappers and car validation.
 - Frontend unit tests sit next to the code (`frontend/src/lib/*.test.ts`) and cover price estimates, date/money formatting and status labels.
-- `.github/workflows/ci.yml` runs on every pull request and push to `main`: backend tests and build run in parallel, then frontend lint, tests and build run as a matrix. The workflow needs no secrets because the unit tests do not touch the database or Stripe.
+- `.github/workflows/ci.yml` runs on pushes to every branch and pull requests to `main`: backend tests and build run in parallel, then frontend lint, tests and build run as a matrix. The workflow needs no secrets because the unit tests do not touch the database or Stripe.
 
 ## Test Artifacts
 
@@ -272,3 +272,5 @@ Requests and test logs are in requests/:
 - race-condition-modify-test.mjs
 - idempotency-test.mjs
 - idempotency-test-results.txt
+
+The manual booking tests require a running backend, migrated database, Stripe test credentials, and seeded test users. The creation race and idempotency tests generate future dates by default and may leave pending bookings. The modification race test requires `VITE_BOOKING_IDS` containing at least two confirmed bookings for the same car and rental length; use dedicated test bookings because one will be moved.

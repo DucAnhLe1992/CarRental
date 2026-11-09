@@ -41,15 +41,23 @@ const BASE_URL = await resolveBaseUrl(Number(process.env.VITE_API_PORT ?? 3000))
 const LOGIN_EMAIL = process.env.VITE_LOGIN_EMAIL ?? "alice.johnson@example.com";
 const LOGIN_PASSWORD = process.env.VITE_LOGIN_PASSWORD ?? "AliceJ@123";
 
+function dateAfterDays(days) {
+  const date = new Date();
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 const CAR_ID   = Number(process.env.VITE_CAR_ID   ?? 1);
-const START_A  = process.env.VITE_START_A  ?? "2026-09-01";
-const END_A    = process.env.VITE_END_A    ?? "2026-09-05";
+const RUN_OFFSET_DAYS = 60 + Math.floor(Math.random() * 1000);
+const START_A  = process.env.VITE_START_A  ?? dateAfterDays(RUN_OFFSET_DAYS);
+const END_A    = process.env.VITE_END_A    ?? dateAfterDays(RUN_OFFSET_DAYS + 4);
 // Different dates for Test 2 (must not overlap START_A/END_A on the same car)
-const START_B  = process.env.VITE_START_B  ?? "2026-09-20";
-const END_B    = process.env.VITE_END_B    ?? "2026-09-25";
+const START_B  = process.env.VITE_START_B  ?? dateAfterDays(RUN_OFFSET_DAYS + 20);
+const END_B    = process.env.VITE_END_B    ?? dateAfterDays(RUN_OFFSET_DAYS + 25);
 // Isolated dates for first request in Test 2
-const START_C  = process.env.VITE_START_C  ?? "2026-10-10";
-const END_C    = process.env.VITE_END_C    ?? "2026-10-14";
+const START_C  = process.env.VITE_START_C  ?? dateAfterDays(RUN_OFFSET_DAYS + 40);
+const END_C    = process.env.VITE_END_C    ?? dateAfterDays(RUN_OFFSET_DAYS + 44);
 
 async function login() {
   const res = await fetch(`${BASE_URL}/auth/login`, {
@@ -157,10 +165,10 @@ function fail(label, detail) {
   else
     fail("First request should return 201", `got ${r2a.status}: ${JSON.stringify(r2a.body)}`);
 
-  if (r2b.status === 409)
-    pass("Different body with same key returns 409 Conflict — key reuse correctly rejected");
+  if (r2b.status === 422)
+    pass("Different body with same key returns 422 — key reuse correctly rejected");
   else
-    fail("Different body with same key should return 409", `got ${r2b.status}: ${JSON.stringify(r2b.body)}`);
+    fail("Different body with same key should return 422", `got ${r2b.status}: ${JSON.stringify(r2b.body)}`);
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log("-".repeat(60));

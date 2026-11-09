@@ -1,190 +1,121 @@
 /**
- * race-condition-modify-test.mjs
+ * Races PUT /bookings/:id using confirmed bookings that already exist.
+ * Provide at least two IDs for the same car and rental length. Use dedicated
+ * test bookings; one booking will be moved to the shared future date window.
  *
- * Race condition test for PUT /bookings/:id (booking modification).
- *
- * Strategy:
- *   1. Create N bookings for the SAME car, all in non-overlapping "safe" date windows.
- *   2. Fire N concurrent PUT requests, each trying to move its own booking into the
- *      SAME "target" window that overlaps with all others.
- *   3. A correct implementation (car-row lock + overlap check) allows exactly 1
- *      modification to succeed; all others must be rejected with 409.
- *   4. If more than 1 succeeds, the locking is broken and a race condition exists.
- *
- * Usage:
- *   1. Make sure the backend is running (npm run dev inside /backend)
- *   2. Set LOGIN_EMAIL / LOGIN_PASSWORD below (or set env vars)
- *   3. node requests/race-condition-modify-test.mjs
+ * Required: VITE_BOOKING_IDS=12,13 (or more IDs).
+ * Optional: VITE_API_PORT, VITE_LOGIN_EMAIL, VITE_LOGIN_PASSWORD,
+ * VITE_TARGET_START, and VITE_TARGET_END.
  */
 
 async function resolveBaseUrl(startPort = 3000, maxAttempts = 10) {
-  for (let port = startPort; port < startPort + maxAttempts; port++) {
+  for (let port = startPort; port < startPort + maxAttempts; port += 1) {
     try {
-      const res = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1000) });
-      if (!res.ok) continue;
-      const body = await res.json().catch(() => null);
-      if (body?.message === "Rental Car API is running") {
-        console.log(`Found CarRental server on port ${port}.`);
-        return `http://localhost:${port}`;
-      }
-      console.warn(`Port ${port} is in use by another service, trying ${port + 1}...`);
-    } catch {}
+      const response = await fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(1000) });
+      const body = await response.json().catch(() => null);
+      if (response.ok && body?.message === "Rental Car API is running") return `http://localhost:${port}`;
+    } catch {
+      // Try the next local port.
+    }
   }
-  throw new Error(`CarRental server not found on ports ${startPort}–${startPort + maxAttempts - 1}. Is the backend running?`);
+  throw new Error("CarRental API was not found on the expected local ports");
 }
 
-const BASE_URL = await resolveBaseUrl(Number(process.env.VITE_API_PORT ?? 3000));
-const LOGIN_EMAIL = "bob.martinez@example.com";
-const LOGIN_PASSWORD = "BobM@1234";
-
-// ── Target booking params ────────────────────────────────────────────────────
-const CAR_ID = Number(process.env.VITE_CAR_ID ?? 1);
-// Each booking gets its own non-overlapping "safe" source window.
-// All N concurrent modify requests then try to move into the shared TARGET window.
-// Only 1 should win; all others should be rejected as overlapping with the winner.
-const TARGET_START = process.env.VITE_TARGET_START ?? "2026-11-01";
-const TARGET_END   = process.env.VITE_TARGET_END   ?? "2026-11-05";
-const CONCURRENT_REQUESTS = Number(process.env.VITE_N ?? 5);
-
-// Generate N non-overlapping source windows starting well away from TARGET.
-// Each window is 7 days, spaced 10 days apart, starting from 2026-12-01.
-function sourceDates(index) {
-  const base = new Date("2026-12-01");
-  base.setDate(base.getDate() + index * 10);
-  const start = base.toISOString().slice(0, 10);
-  const end = new Date(base.setDate(base.getDate() + 6)).toISOString().slice(0, 10);
-  return { startDate: start, endDate: end };
+function dateAfterDays(days) {
+  const date = new Date();
+  date.setUTCHours(12, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
 }
 
-// ── 1. Log in and grab the JWT from the Set-Cookie header ────────────────────
+function addDays(isoDate, days) {
+  const date = new Date(`${isoDate}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function rentalDays(startDate, endDate) {
+  return (Date.parse(`${endDate}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`)) / 86_400_000 + 1;
+}
+
+const baseUrl = await resolveBaseUrl(Number(process.env.VITE_API_PORT ?? 3000));
+const loginEmail = process.env.VITE_LOGIN_EMAIL ?? "bob.martinez@example.com";
+const loginPassword = process.env.VITE_LOGIN_PASSWORD ?? "BobM@1234";
+const bookingIds = [...new Set((process.env.VITE_BOOKING_IDS ?? "")
+  .split(",")
+  .map((value) => Number(value.trim()))
+  .filter((value) => Number.isSafeInteger(value) && value > 0))];
+
 async function login() {
-  console.log(`  Sending POST /auth/login...`);
-  const res = await fetch(`${BASE_URL}/auth/login`, {
+  const response = await fetch(`${baseUrl}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email: LOGIN_EMAIL, password: LOGIN_PASSWORD }),
+    body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+  });
+  if (!response.ok) throw new Error(`Login failed (${response.status}): ${await response.text()}`);
+  const cookie = response.headers.get("set-cookie") ?? "";
+  const token = cookie.match(/token=([^;]+)/)?.[1];
+  if (!token) throw new Error("Login response did not contain the token cookie");
+  return token;
+}
+
+async function fetchBooking(token, id) {
+  const response = await fetch(`${baseUrl}/bookings/${id}`, {
+    headers: { Cookie: `token=${token}` },
     signal: AbortSignal.timeout(5000),
   });
-  console.log(`  Login response: HTTP ${res.status}`);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Login failed (${res.status}): ${body}`);
-  }
-  const setCookie = res.headers.get("set-cookie") ?? "";
-  console.log(`  Set-Cookie header: ${setCookie.slice(0, 60)}...`);
-  const match = setCookie.match(/token=([^;]+)/);
-  if (!match) throw new Error("No token cookie in login response");
-  return match[1];
+  if (!response.ok) throw new Error(`Could not load booking ${id} (${response.status}): ${await response.text()}`);
+  return response.json();
 }
 
-// ── 2. Create a booking to modify ────────────────────────────────────────────
-async function createBooking(token, startDate, endDate) {
-  console.log(`  Sending POST /bookings (${startDate} → ${endDate})...`);
-  const res = await fetch(`${BASE_URL}/bookings`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: `token=${token}`,
-    },
-    body: JSON.stringify({ carId: CAR_ID, startDate, endDate }),
-    signal: AbortSignal.timeout(5000),
+async function modifyBooking(token, id, index, startDate, endDate) {
+  const response = await fetch(`${baseUrl}/bookings/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Cookie: `token=${token}` },
+    body: JSON.stringify({ startDate, endDate }),
+    signal: AbortSignal.timeout(10000),
   });
-  console.log(`  Create booking response: HTTP ${res.status}`);
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Booking creation failed (${res.status}): ${body}`);
-  }
-  const booking = await res.json();
-  console.log(`  Booking created: id=${booking.id}`);
-  return booking.id;
+  return { index, status: response.status, body: await response.json() };
 }
 
-// ── 3. Fire one modify request ───────────────────────────────────────────────
-async function putModifyBooking(token, bookingId, index) {
-  const start = Date.now();
-  console.log(`  [${index}] Sending PUT /bookings/${bookingId} → ${TARGET_START}–${TARGET_END}...`);
-  try {
-    const res = await fetch(`${BASE_URL}/bookings/${bookingId}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `token=${token}`,
-      },
-      body: JSON.stringify({ startDate: TARGET_START, endDate: TARGET_END }),
-      signal: AbortSignal.timeout(10000),
-    });
-    console.log(`  [${index}] Response received: HTTP ${res.status}`);
-    const body = await res.json();
-    const elapsed = Date.now() - start;
-    return { index, status: res.status, body, elapsed };
-  } catch (err) {
-    console.log(`  [${index}] ERROR: ${err.message}`);
-    return { index, status: "ERR", body: err.message, elapsed: Date.now() - start };
-  }
+if (bookingIds.length < 2) {
+  throw new Error("Set VITE_BOOKING_IDS to at least two comma-separated, confirmed booking IDs");
 }
 
-// ── 4. Main ──────────────────────────────────────────────────────────────────
-(async () => {
-  console.log(`Logging in as ${LOGIN_EMAIL}...`);
-  const token = await login();
-  console.log("Login OK.\n");
+const token = await login();
+const bookings = await Promise.all(bookingIds.map((id) => fetchBooking(token, id)));
+if (bookings.some((booking) => booking.status !== "confirmed")) {
+  throw new Error("Every VITE_BOOKING_IDS entry must be a confirmed booking");
+}
+if (new Set(bookings.map((booking) => booking.carId)).size !== 1) {
+  throw new Error("Every VITE_BOOKING_IDS entry must be for the same car");
+}
 
-  // Step 1: Create N bookings in distinct non-overlapping source windows.
-  console.log(`Creating ${CONCURRENT_REQUESTS} separate bookings on car ${CAR_ID}...\n`);
-  const bookingIds = [];
-  for (let i = 0; i < CONCURRENT_REQUESTS; i++) {
-    const { startDate, endDate } = sourceDates(i);
-    const id = await createBooking(token, startDate, endDate);
-    bookingIds.push(id);
-  }
-  console.log(`\nAll bookings created: [${bookingIds.join(", ")}]\n`);
+const dayCounts = new Set(bookings.map((booking) => rentalDays(booking.startDate, booking.endDate)));
+if (dayCounts.size !== 1 || !Number.isInteger([...dayCounts][0]) || [...dayCounts][0] < 1) {
+  throw new Error("Every confirmed booking must have the same valid rental length");
+}
 
-  // Step 2: Concurrently try to move ALL of them into the same TARGET window.
-  // Only 1 can win — the others must hit an overlap conflict with the winner.
-  console.log(
-    `Firing ${CONCURRENT_REQUESTS} concurrent PUT requests, all targeting ${TARGET_START} → ${TARGET_END}\n`
-  );
+const rentalLength = [...dayCounts][0];
+const targetStart = process.env.VITE_TARGET_START ?? dateAfterDays(730 + Math.floor(Math.random() * 365));
+const targetEnd = process.env.VITE_TARGET_END ?? addDays(targetStart, rentalLength - 1);
+if (rentalDays(targetStart, targetEnd) !== rentalLength) {
+  throw new Error(`The target date range must be ${rentalLength} days long`);
+}
 
-  const promises = bookingIds.map((id, i) =>
-    putModifyBooking(token, id, i + 1)
-  );
-  const results = await Promise.all(promises);
+console.log(`Racing ${bookingIds.length} confirmed bookings for car ${bookings[0].carId}: ${targetStart} to ${targetEnd}`);
+const results = await Promise.all(
+  bookingIds.map((id, index) => modifyBooking(token, id, index + 1, targetStart, targetEnd))
+);
 
-  // ── Report ──────────────────────────────────────────────────────────────────
-  let success = 0;
-  let overlap = 0;
-  let other = 0;
+const modified = results.filter((result) => result.status === 200);
+const rejected = results.filter((result) => result.status === 409);
+for (const result of results) {
+  console.log(`#${result.index}: HTTP ${result.status}, booking ${result.body?.id ?? "-"}`);
+}
+console.log(`Modified: ${modified.length}; overlap rejected: ${rejected.length}; other: ${results.length - modified.length - rejected.length}`);
 
-  console.log("-".repeat(60));
-  console.log(`#   HTTP  elapsed  result`);
-  console.log("-".repeat(60));
-
-  for (const r of results) {
-    const label =
-      r.status === 200
-        ? `[OK]      MODIFIED  id=${r.body.id}`
-        : r.status === 409
-        ? `[REJECT]  OVERLAP_REJECTED`
-        : `[ERROR]   status=${r.status}  ${JSON.stringify(r.body).slice(0, 80)}`;
-
-    if (r.status === 200) success++;
-    else if (r.status === 409) overlap++;
-    else other++;
-
-    console.log(`${String(r.index).padStart(2)}  ${String(r.status).padEnd(4)}  ${String(r.elapsed + "ms").padEnd(8)} ${label}`);
-  }
-
-  console.log("-".repeat(60));
-  console.log(`\nSummary:`);
-  console.log(`  Successful modifications : ${success}  <- should be exactly 1`);
-  console.log(`  Overlap-rejected         : ${overlap}  <- should be ${CONCURRENT_REQUESTS - 1}`);
-  console.log(`  Other errors             : ${other}`);
-
-  if (success > 1) {
-    console.log(`\n[BUG] RACE CONDITION CONFIRMED -- ${success} bookings all moved into the same window!`);
-  } else if (success === 1) {
-    console.log(`\n[OK]  Exactly 1 modification succeeded. Locking is working correctly.`);
-  } else {
-    console.log(`\n[WARN] No modifications succeeded. Check credentials, carId, or date range.`);
-  }
-})();
+if (modified.length !== 1 || rejected.length !== bookingIds.length - 1) {
+  console.error("Race check failed: expected one modification and all other requests rejected.");
+  process.exitCode = 1;
+}
