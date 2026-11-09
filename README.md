@@ -235,7 +235,7 @@ Important:
 - backend must run with matching STRIPE_WEBHOOK_SECRET from stripe listen output
 - webhook route is mounted before express.json() and uses express.raw for signature verification
 
-## Tests and CI (Phase 7)
+## Tests and CI
 
 - Backend unit tests live in `backend/tests/` and cover date validation, pricing, the booking state machine, idempotency hashing, row mappers and car validation.
 - Frontend unit tests sit next to the code (`frontend/src/lib/*.test.ts`) and cover price estimates, date/money formatting and status labels.
