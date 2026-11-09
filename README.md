@@ -2,6 +2,8 @@
 
 Full-stack car rental app with role-based auth, inventory-safe booking concurrency, Stripe Checkout payment flow, and webhook-driven booking confirmation.
 
+Live demo: [https://drivenow-carrental.netlify.app/](https://drivenow-carrental.netlify.app/)
+
 - Backend: Node.js + Express + TypeScript, PostgreSQL (Neon) via Drizzle ORM
 - Frontend: React + TypeScript + MUI, built with Vite
 
@@ -32,7 +34,7 @@ Full-stack car rental app with role-based auth, inventory-safe booking concurren
 └── package.json
 ```
 
-Detailed design notes (state machine, locking, idempotency, webhook trust boundary): see ARCHITECTURE.md.
+Detailed design notes (state machine, locking, idempotency, webhook trust boundary): see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Quick Start
 
@@ -161,7 +163,7 @@ Hardening:
 
 ## API Endpoints
 
-Base URL: http://localhost:3000
+Local API base URL: http://localhost:3000
 
 Cars:
 
@@ -255,7 +257,7 @@ This repository includes production-style safeguards for booking and payment han
 - Multi-layer idempotency (application, Stripe API, webhook event)
 - Signed webhook verification with raw-body parsing
 
-See ARCHITECTURE.md for full details.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for full details.
 
 ## Local Stripe Webhook Test
 
